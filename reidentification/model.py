@@ -5,8 +5,9 @@
 """
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout
+from keras import backend as K
 
-keras.set_image_dim_ordering('th')
+K.set_image_dim_ordering('th')
 
 model = Sequential()
 
