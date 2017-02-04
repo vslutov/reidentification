@@ -25,8 +25,8 @@ def get_data_folder():
 def get_mnist(dataset = "training"):
     """Get mnist dataset."""
     (X_train, y_train), (X_test, y_test) = mnist.load_data()
-    X_train = X_train.reshape(-1, 28, 28, 1)
-    X_test = X_test.reshape(-1, 28, 28, 1)
+    X_train = X_train.reshape(-1, 1, 28, 28)
+    X_test = X_test.reshape(-1, 1, 28, 28)
     X_train = X_train.astype(np.float32)
     X_test = X_test.astype(np.float32)
     X_train /= 255
