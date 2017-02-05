@@ -72,10 +72,9 @@ def prepare_market1501():
                               r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
         test_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_test/' +
                              r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
-        zip_file = ZipFile(zip_filepath)
 
-        for filepath in zip_file.namelist():
-            if train_re.search(filepath):
+        with ZipFile(zip_filepath) as zip_file:
+            for filepath in zip_file.namelist():
                 load_jpg(filepath, train_re, X_train, y_train)
                 load_jpg(filepath, test_re, X_test, y_test)
 
