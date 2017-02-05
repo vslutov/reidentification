@@ -20,6 +20,7 @@ setup(name='reidentification',
       install_requires=['Keras==1.2.1',
                         'h5py==2.6.0'
                         'tensorflow==0.12.1'
+                        'pillow==4.0.0'
                        ],
       packages=find_packages(),
       include_package_data=True,
