@@ -12,7 +12,7 @@ from enum import Enum
 from .i18n import _
 from .evaluate import evaluate as run_evaluate
 from .datasets import prepare_market1501
-from .models import prepare_simple
+from .models import models, ModelType
 
 class PrepareType(Enum):
     """Prepare type"""
@@ -21,6 +21,7 @@ class PrepareType(Enum):
 
     # models
     simple = 'simple'
+    vgg16 = 'vgg16'
 
 def run_prepare(args):
     """Prepare dataset or model."""
@@ -28,7 +29,9 @@ def run_prepare(args):
     if args.type == PrepareType.market1501:
         prepare_market1501()
     elif args.type == PrepareType.simple:
-        prepare_simple(nb_epoch=args.nb_epoch)
+        models[ModelType.simple].prepare(nb_epoch=args.nb_epoch)
+    elif args.type == PrepareType.vgg16:
+        models[ModelType.vgg16].prepare(nb_epoch=args.nb_epoch)
     else:
         raise NotImplementedError()
 
@@ -40,6 +43,7 @@ def main():
     subparsers = parser.add_subparsers(title='actions', help=_("system actions"))
 
     evaluate = subparsers.add_parser('evaluate', help=_("evaluate model"))
+    evaluate.add_argument('type', choices=ModelType, type=ModelType, help=_("model type"))
     evaluate.set_defaults(func=run_evaluate)
 
     prepare = subparsers.add_parser('prepare', help=_("prepare dataset or model"))

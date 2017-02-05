@@ -67,14 +67,17 @@ def prepare_market1501():
     if os.path.isfile(MARKET1501_ZIP):
 
         X_train, y_train, X_test, y_test = [], [], [], []
-        train_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_(?:train)|(?:test)/' +
+        train_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_train/' +
                               r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
+        train_re2 = re.compile(r'^Market-1501-v15.09.15/bounding_box_test/' +
+                               r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
         test_re = re.compile(r'^Market-1501-v15.09.15/query/' +
                              r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
 
         with ZipFile(MARKET1501_ZIP) as zip_file:
             for filepath in zip_file.namelist():
                 load_jpg(filepath, train_re, X_train, y_train)
+                load_jpg(filepath, train_re2, X_train, y_train)
                 load_jpg(filepath, test_re, X_test, y_test)
 
         Y_train = np_utils.to_categorical(y_train, 1502)
