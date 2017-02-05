@@ -11,7 +11,7 @@ from enum import Enum
 
 from .i18n import _
 from .evaluate import evaluate as run_evaluate
-from .datasets import prepare_market1501
+from .datasets import datasets, DatasetType
 from .models import models, ModelType
 
 class PrepareType(Enum):
@@ -23,32 +23,38 @@ class PrepareType(Enum):
     simple = 'simple'
     vgg16 = 'vgg16'
 
-def run_prepare(args):
-    """Prepare dataset or model."""
+def prepare_dataset(args):
+    """Prepare model."""
     print(_("Preparing {type}").format(type=args.type))
-    if args.type == PrepareType.market1501:
-        prepare_market1501()
-    elif args.type == PrepareType.simple:
-        models[ModelType.simple].prepare(nb_epoch=args.nb_epoch)
-    elif args.type == PrepareType.vgg16:
-        models[ModelType.vgg16].prepare(nb_epoch=args.nb_epoch)
-    else:
-        raise NotImplementedError()
+    datasets[args.type].prepare()
+
+def prepare_model(args):
+    """Prepare dataset."""
+    print(_("Preparing {type}").format(type=args.type))
+    models[args.type].prepare(nb_epoch=args.nb_epoch)
 
 def main():
     """Main function - parse command-line arguments and run function."""
     parser = argparse.ArgumentParser(description=_("Run reidentification experiments."))
-    parser.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
 
     subparsers = parser.add_subparsers(title='actions', help=_("system actions"))
 
     evaluate = subparsers.add_parser('evaluate', help=_("evaluate model"))
     evaluate.add_argument('type', choices=ModelType, type=ModelType, help=_("model type"))
+    evaluate.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
     evaluate.set_defaults(func=run_evaluate)
 
     prepare = subparsers.add_parser('prepare', help=_("prepare dataset or model"))
-    prepare.add_argument('type', choices=PrepareType, type=PrepareType, help=_("prepare type"))
-    prepare.set_defaults(func=run_prepare)
+    prepare_subparsers = prepare.add_subparsers(title='type', help=_("prepare type"))
+
+    dataset = prepare_subparsers.add_parser('dataset', help=_("prepare dataset"))
+    dataset.add_argument('type', choices=DatasetType, type=DatasetType, help=_("dataset"))
+    dataset.set_defaults(func=prepare_dataset)
+
+    model = prepare_subparsers.add_parser('model', help=_("prepare model"))
+    model.add_argument('type', choices=ModelType, type=ModelType, help=_("model"))
+    model.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
+    model.set_defaults(func=prepare_model)
 
     args = parser.parse_args()
 

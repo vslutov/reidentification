@@ -13,41 +13,41 @@ from keras.applications import VGG16 as BaseVGG16
 from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout
 from keras import backend as K
 
-from .datasets import get_filepath, get_market1501
+from .datasets import get_filepath, DatasetType
 from .i18n import _
-
-
-class ModelType(Enum):
-
-    """Model type"""
-
-    simple = 'simple'
-    vgg16 = 'vgg16'
 
 K.set_image_dim_ordering('tf')
 
-def prepare_model(func):
+def save_model(func):
     """Save model after fit."""
     @wraps(func)
     def wrapper(cls, *args, **kwargs):
         """Wrapper to prepare model."""
-        model = func(cls, *args, **kwargs)
-        model.save(cls.filepath)
-        return model
+        cls.model = func(cls, *args, **kwargs)
+
+        market1501 = datasets[DatasetType.market1501].get()
+        cls.model.fit(market1501['X_train'], market1501['Y_train'], batch_size=32, nb_epoch=nb_epoch, verbose=1)
+        cls.model.save(cls.filepath)
+        return cls.model
     return wrapper
 
 class ReidModel:
 
-    """Abstract class for model"""
+    """Abstract model class"""
+
+    filepath = None
+    model = None
 
     @classmethod
     def get(cls, *args, **kwargs):
         """Get model."""
-        if not os.path.isfile(cls.filepath):
-            print(_("{filepath} not found... creating").format(filepath=cls.filepath))
-            return cls.prepare(*args, **kwargs)
-        else:
-            return load_model(cls.filepath)
+        if cls.model is None:
+            if os.path.isfile(cls.filepath):
+                cls.model = load_model(cls.filepath)
+            else:
+                print(_("{filepath} not found... creating").format(filepath=cls.filepath))
+                cls.model = cls.prepare(*args, **kwargs)
+        return cls.model
 
     @classmethod
     def prepare(cls, *args, **kwargs):
@@ -61,7 +61,7 @@ class Simple(ReidModel):
     filepath = get_filepath('simple.h5')
 
     @classmethod
-    @prepare_model
+    @save_model
     def prepare(cls, nb_epoch):
         """Prepare simple model."""
         model = Sequential()
@@ -76,9 +76,6 @@ class Simple(ReidModel):
         model.add(Dense(1502, activation='softmax'))
 
         model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-
-        (X_train, Y_train), (X_test, Y_test) = get_market1501()
-        model.fit(X_train, Y_train, batch_size=32, nb_epoch=nb_epoch, verbose=1)
         return model
 
 class VGG16(ReidModel):
@@ -88,10 +85,11 @@ class VGG16(ReidModel):
     filepath = get_filepath('vgg16.h5')
 
     @classmethod
-    @prepare_model
+    @save_model
     def prepare(cls, nb_epoch):
         """Prepare VGG model."""
         base_model = BaseVGG16(include_top=False, input_shape=(128, 64, 3))
+        print(dir(base_model))
         top = Flatten()(base_model.output)
         top = Dense(4096, activation='relu')(top)
         top = Dense(4096, activation='relu')(top)
@@ -100,10 +98,14 @@ class VGG16(ReidModel):
         model = Model(base_model.input, top)
 
         model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-
-        (X_train, Y_train), (X_test, Y_test) = get_market1501()
-        model.fit(X_train, Y_train, batch_size=32, nb_epoch=nb_epoch, verbose=1)
         return model
+
+class ModelType(Enum):
+
+    """Model type"""
+
+    simple = 'simple'
+    vgg16 = 'vgg16'
 
 models = {ModelType.simple: Simple,
           ModelType.vgg16: VGG16
