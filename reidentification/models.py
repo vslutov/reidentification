@@ -34,7 +34,7 @@ def get_model(filename, prepare_model):
     """Load or create model template"""
     def get_model_template(*args, **kwargs):
         """Load or create model template"""
-        if not os.isfile(filename):
+        if not os.path.isfile(filename):
             print(_("{filename} not found... creating").format(filename=filename))
             return prepare_model(*args, **kwargs)
         else:
