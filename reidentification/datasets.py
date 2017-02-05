@@ -7,7 +7,6 @@ import os.path
 import struct
 import re
 from zipfile import ZipFile
-from typing import List, Tuple
 
 import numpy as np
 from keras.datasets import mnist
@@ -26,14 +25,14 @@ def get_data_folder() -> str:
         raise ValueError(_("Environment value {value} not found, please, set it to data folder")
                          .format(value=REIDENTIFICATION_DATA_FOLDER))
 
-def get_filepath(filename: str, *args: List[str]) -> str:
+def get_filepath(filename: str, *args) -> str:
     """Get filepath for file from data_dir."""
     return os.path.join(get_data_folder(), filename, *args)
 
 MARKET1501_NPZ = get_filepath('market1501.npz')
 MARKET1501_ZIP = get_filepath('Market-1501-v15.09.15.zip')
 
-def get_mnist() -> Tuple[Tuple[np.array]]:
+def get_mnist():
     """Get mnist dataset."""
     (X_train, y_train), (X_test, y_test) = mnist.load_data()
     X_train = X_train.reshape(-1, 1, 28, 28)
@@ -46,7 +45,7 @@ def get_mnist() -> Tuple[Tuple[np.array]]:
     Y_test = np_utils.to_categorical(y_test, 10)
     return (X_train, Y_train), (X_test, Y_test)
 
-def get_market1501() -> Tuple[Tuple[np.array]]:
+def get_market1501():
     """Get market 1501 dataset."""
     if not os.path.isfile(MARKET1501_NPZ):
         print(_("{filename} not found... creating").format(filename=MARKET1501_NPZ))
@@ -55,7 +54,7 @@ def get_market1501() -> Tuple[Tuple[np.array]]:
         npz_file = np.load(MARKET1501_NPZ)
         return (npz_file['X_train'], npz_file['Y_train']), (npz_file['X_test'], npz_file['Y_test'])
 
-def prepare_market1501() -> Tuple[Tuple[np.array]]:
+def prepare_market1501():
     """Unzip market1501 and save to npz."""
     def load_jpg(filepath, regexp, X, y):
         """Load jpg from archieve and save image and label."""

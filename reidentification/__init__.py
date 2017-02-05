@@ -3,5 +3,5 @@
 
 """Reidentification experiments.
 
-It uses keras, theano and cuDNN.
+It uses keras, you can use theano and cuDNN for fast learning.
 """
