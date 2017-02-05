@@ -11,13 +11,14 @@ from keras.models import Sequential, load_model
 from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout
 from keras import backend as K
 
-from .datasets import get_filepath
+from .datasets import get_filepath, get_market1501
+from .i18n import _
 
 SIMPLE_H5 = get_filepath('simple.h5')
 
 K.set_image_dim_ordering('tf')
 
-def prepare_model(filename):
+def prepare_model(filepath):
     """Save model after fit."""
     def decorator(func):
         """Decorator to prepare model."""
@@ -30,15 +31,15 @@ def prepare_model(filename):
         return wrapper
     return decorator
 
-def get_model(filename, prepare_model):
+def get_model(filepath, prepare_model):
     """Load or create model template"""
     def get_model_template(*args, **kwargs):
         """Load or create model template"""
-        if not os.path.isfile(filename):
-            print(_("{filename} not found... creating").format(filename=filename))
+        if not os.path.isfile(filepath):
+            print(_("{filepath} not found... creating").format(filepath=filepath))
             return prepare_model(*args, **kwargs)
         else:
-            return load_model(filename)
+            return load_model(filepath)
 
     return get_model_template
 
@@ -62,4 +63,4 @@ def prepare_simple(nb_epoch):
     model.fit(X_train, Y_train, batch_size=32, nb_epoch=nb_epoch, verbose=1)
     return model
 
-get_simple = get_model(filename=SIMPLE_H5, prepare_model=prepare_simple)
+get_simple = get_model(filepath=SIMPLE_H5, prepare_model=prepare_simple)

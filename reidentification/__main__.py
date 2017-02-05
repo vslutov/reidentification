@@ -43,7 +43,7 @@ def main():
     evaluate.set_defaults(func=run_evaluate)
 
     prepare = subparsers.add_parser('prepare', help=_("prepare dataset or model"))
-    prepare.add_argument('type', choices=PrepareType, help=_("prepare type"))
+    prepare.add_argument('type', choices=PrepareType, type=PrepareType, help=_("prepare type"))
     prepare.set_defaults(func=run_prepare)
 
     args = parser.parse_args()

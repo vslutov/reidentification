@@ -4,6 +4,7 @@
 """Evaluate model and print result.
 """
 
+from tabulate import tabulate
 import numpy as np
 np.random.seed(123)
 
@@ -14,4 +15,5 @@ def evaluate(args):
     """Evaluate model and print result."""
     (X_train, Y_train), (X_test, Y_test) = get_market1501()
     model = get_simple(nb_epoch=args.nb_epoch)
-    print(model.evaluate(X_test, Y_test, verbose=0))
+    print(tabulate([model.evaluate(X_test, Y_test, verbose=0)],
+                   headers=model.metrics_names))
