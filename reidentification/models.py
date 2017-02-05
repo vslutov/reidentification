@@ -8,7 +8,7 @@ import os.path
 from functools import wraps
 from enum import Enum
 
-from keras.models import Sequential, load_model
+from keras.models import Model, Sequential, load_model
 from keras.applications import VGG16 as BaseVGG16
 from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout
 from keras import backend as K
@@ -36,7 +36,7 @@ def prepare_model(func):
         return model
     return wrapper
 
-class Model:
+class ReidModel:
 
     """Abstract class for model"""
 
@@ -54,7 +54,7 @@ class Model:
         """Should be replaced in successor."""
         raise NotImplementedError()
 
-class Simple(Model):
+class Simple(ReidModel):
 
     """Simple model"""
 
@@ -81,7 +81,7 @@ class Simple(Model):
         model.fit(X_train, Y_train, batch_size=32, nb_epoch=nb_epoch, verbose=1)
         return model
 
-class VGG16(Model):
+class VGG16(ReidModel):
 
     """VGG16 model"""
 
@@ -91,11 +91,13 @@ class VGG16(Model):
     @prepare_model
     def prepare(cls, nb_epoch):
         """Prepare VGG model."""
-        model = BaseVGG16(include_top=False, input_shape=(128, 64, 3))
-        model.add(Dence(4096, activation='relu'))
-        model.add(Dence(4096, activation='relu'))
-        model.add(Dropout(0.5))
-        model.add(Dense(1502, activation='softmax'))
+        base_model = BaseVGG16(include_top=False, input_shape=(128, 64, 3))
+        top = Flatten()(base_model.output)
+        top = Dense(4096, activation='relu')(top)
+        top = Dense(4096, activation='relu')(top)
+        top = Dropout(0.5)(top)
+        top = Dense(1502, activation='softmax')(top)
+        model = Model(base_model.input, top)
 
         model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
