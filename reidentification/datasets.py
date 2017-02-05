@@ -67,9 +67,9 @@ def prepare_market1501():
     if os.path.isfile(MARKET1501_ZIP):
 
         X_train, y_train, X_test, y_test = [], [], [], []
-        train_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_train/' +
+        train_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_(?:train)|(?:test)/' +
                               r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
-        test_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_test/' +
+        test_re = re.compile(r'^Market-1501-v15.09.15/query/' +
                              r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
 
         with ZipFile(MARKET1501_ZIP) as zip_file:
