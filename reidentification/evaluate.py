@@ -7,11 +7,11 @@
 import numpy as np
 np.random.seed(123)
 
-from .model import model
+from .models import get_simple
 from .datasets import get_market1501
 
 def evaluate(args):
     """Evaluate model and print result."""
     (X_train, Y_train), (X_test, Y_test) = get_market1501()
-    model.fit(X_train, Y_train, batch_size=32, nb_epoch=10, verbose=1)
+    model = get_simple(nb_epoch=args.nb_epoch)
     print(model.evaluate(X_test, Y_test, verbose=0))
