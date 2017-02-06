@@ -13,7 +13,7 @@ from keras.applications import VGG16 as BaseVGG16
 from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout
 from keras import backend as K
 
-from .datasets import get_filepath, DatasetType
+from .datasets import get_filepath, datasets, DatasetType
 from .i18n import _
 
 K.set_image_dim_ordering('tf')
@@ -21,9 +21,9 @@ K.set_image_dim_ordering('tf')
 def save_model(func):
     """Save model after fit."""
     @wraps(func)
-    def wrapper(cls, *args, **kwargs):
+    def wrapper(cls, nb_epoch, *args, **kwargs):
         """Wrapper to prepare model."""
-        cls.model = func(cls, *args, **kwargs)
+        cls.model = func(cls, nb_epoch=nb_epoch, *args, **kwargs)
 
         market1501 = datasets[DatasetType.market1501].get()
         cls.model.fit(market1501['X_train'], market1501['Y_train'], batch_size=32, nb_epoch=nb_epoch, verbose=1)
@@ -89,13 +89,15 @@ class VGG16(ReidModel):
     def prepare(cls, nb_epoch):
         """Prepare VGG model."""
         base_model = BaseVGG16(include_top=False, input_shape=(128, 64, 3))
-        print(dir(base_model))
+        for layer in base_model.layers:
+            layer.trainable = False
         top = Flatten()(base_model.output)
-        top = Dense(4096, activation='relu')(top)
-        top = Dense(4096, activation='relu')(top)
+        top = Dense(1024, activation='relu')(top)
+        top = Dense(1024, activation='relu')(top)
         top = Dropout(0.5)(top)
         top = Dense(1502, activation='softmax')(top)
         model = Model(base_model.input, top)
+        model.summary()
 
         model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
         return model
