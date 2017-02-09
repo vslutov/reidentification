@@ -106,7 +106,8 @@ class Market1501(Dataset):
             if match:
                 y.append(int(match.groups()[0]))
                 with zip_file.open(match.string) as image_file:
-                    X.append(misc.imread(image_file).astype(np.float32) / 255)
+                    X.append(misc.imresize(misc.imread(image_file)
+                                           .astype(np.float32) / 255, (224, 224)))
 
         if os.path.isfile(MARKET1501_ZIP):
 
