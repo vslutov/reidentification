@@ -14,6 +14,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout
 from keras import backend as K
 from tabulate import tabulate
+from sklearn.neighbors import KNeighborsClassifier
 
 from .datasets import get_filepath, datasets, DatasetType
 from .i18n import _
@@ -36,19 +37,39 @@ def pop_layer(model):
         model.outputs = [model.layers[-1].output]
     model.built = False
 
-def save_model(func):
-    """Save model after fit."""
-    @wraps(func)
-    def wrapper(cls, nb_epoch, *args, **kwargs):
-        """Wrapper to prepare model."""
-        cls.model = func(cls, nb_epoch=nb_epoch, *args, **kwargs)
-        cls.model.summary()
+class ReidModel:
 
-        market1501 = datasets[DatasetType.market1501].get()
-        X_train = market1501['X_train']
-        Y_train = market1501['Y_train']
-        X_test = market1501['X_test']
-        Y_test = market1501['Y_test']
+    """Abstract model class"""
+
+    filepath = None
+    model = None
+
+    # @classmethod
+    # def get(cls, *args, **kwargs):
+    #     """Get model."""
+    #     if cls.model is None:
+    #         if os.path.isfile(cls.filepath):
+    #             cls.model = load_model(cls.filepath)
+    #         else:
+    #             print(_("{filepath} not found... creating").format(filepath=cls.filepath))
+    #             cls.model = cls.prepare(*args, **kwargs)
+    #     return cls.model
+
+    @classmethod
+    def __init__(cls, *args, **kwargs):
+        """Should be replaced in successor."""
+        raise NotImplementedError()
+
+    def save(self):
+        """Save model after fit."""
+        self.model.save(self.filepath)
+
+
+class NNClassificator(ReidModel):
+
+    def fit(self, X_train, Y_train):
+        """Save model after fit."""
+        self.model.summary()
 
         datagen = ImageDataGenerator(width_shift_range=IMAGE_SHIFT,
                                      height_shift_range=IMAGE_SHIFT,
@@ -58,60 +79,59 @@ def save_model(func):
 
         for i in range(nb_epoch):
             print("Epoch", i + 1, "/", nb_epoch)
-            cls.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                    samples_per_epoch=len(X_train), nb_epoch=1, verbose=1)
-            print(tabulate([cls.model.evaluate(X_test, Y_test, verbose=1)],
-                           headers=cls.model.metrics_names))
-        cls.model.save(cls.filepath)
-        return cls.model
-    return wrapper
+            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
+                                     samples_per_epoch=len(X_train), nb_epoch=1, verbose=1)
+            print(tabulate([self.model.evaluate(X_test, Y_test, verbose=1)],
+                            headers=self.model.metrics_names))
 
-class ReidModel:
-
-    """Abstract model class"""
-
-    filepath = None
-    model = None
+    def get_indexator(self):
+        model = Model(self.model.input, self.model.layers[-2].output)
+        model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
+        return model
 
     @classmethod
-    def get(cls, *args, **kwargs):
-        """Get model."""
-        if cls.model is None:
-            if os.path.isfile(cls.filepath):
-                cls.model = load_model(cls.filepath)
-            else:
-                print(_("{filepath} not found... creating").format(filepath=cls.filepath))
-                cls.model = cls.prepare(*args, **kwargs)
-        return cls.model
+    def prepare(cls, nb_epoch):
+        model = cls()
+        market1501 = datasets[DatasetType.market1501].get()
+        model.fit(market1501['X_train'], market1501['Y_train'])
+        model.save()
 
-    @classmethod
-    def prepare(cls, *args, **kwargs):
-        """Should be replaced in successor."""
-        raise NotImplementedError()
+class FinalClassificator(ReidModel):
 
-class Simple(ReidModel):
+    filename = get_filepath("classificator.h5")
+
+    def __init__(self, indexator):
+        self.indexator = indexator
+
+    def fit(self, X_test, y_test):
+        X_feature = self.indexator.predict(X_test)
+        self.model = KNeighborsClassifier(n_neighbors=3)
+        self.model.fit(X_feature, y_test)
+
+    def predict(self, X_query):
+        X_query = self.indexator.predict(X_query)
+        return self.model.predict_proba(X_query)
+
+class Simple(NNClassificator):
 
     """Simple model"""
 
     filepath = get_filepath('simple.h5')
 
-    @classmethod
-    @save_model
-    def prepare(cls, nb_epoch):
+    def __init__(self):
         """Prepare simple model."""
-        model = Sequential()
+        self.model = Sequential()
 
-        model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(128, 64, 3)))
-        model.add(Convolution2D(32, 3, 3, activation='relu'))
-        model.add(MaxPooling2D(pool_size=(2,2)))
-        model.add(Dropout(0.25))
-        model.add(Flatten())
-        model.add(Dense(128, activation='relu'))
-        model.add(Dropout(0.5))
-        model.add(Dense(1502, activation='softmax'))
+        self.model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(128, 64, 3)))
+        self.model.add(Convolution2D(32, 3, 3, activation='relu'))
+        self.model.add(MaxPooling2D(pool_size=(2,2)))
+        self.model.add(Dropout(0.25))
+        self.model.add(Flatten())
+        self.model.add(Dense(128, activation='relu'))
+        self.model.add(Dropout(0.5))
+        self.model.add(Dense(1502, activation='softmax'))
 
-        model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
-        return model
+        self.model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy', 'top_k_categorical_accuracy'])
 
 class VGG16(ReidModel):
 
@@ -119,21 +139,21 @@ class VGG16(ReidModel):
 
     filepath = get_filepath('vgg16.h5')
 
-    @classmethod
-    @save_model
-    def prepare(cls, nb_epoch):
-        """Prepare VGG model."""
-        base_model = BaseVGG16(include_top=True)
-        base_model.layers.pop()
-        for layer in base_model.layers:
-            layer.trainable = False
-        top = base_model.layers[-1].output
-        top = Dropout(0.5)(top)
-        top = Dense(1502, activation='softmax')(top)
-        model = Model(base_model.input, top)
+    # @classmethod
+    # @save_model
+    # def prepare(cls, nb_epoch):
+    #     """Prepare VGG model."""
+    #     base_model = BaseVGG16(include_top=True)
+    #     base_model.layers.pop()
+    #     for layer in base_model.layers:
+    #         layer.trainable = False
+    #     top = base_model.layers[-1].output
+    #     top = Dropout(0.5)(top)
+    #     top = Dense(1502, activation='softmax')(top)
+    #     model = Model(base_model.input, top)
 
-        model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
-        return model
+    #     model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
+    #     return model
 
 class ModelType(Enum):
 

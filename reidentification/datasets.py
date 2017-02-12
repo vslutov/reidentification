@@ -125,18 +125,18 @@ class Market1501(Dataset):
                     load_jpg(filepath, test_re, X_train, y_train)
                     load_jpg(filepath, query_re, X_query, y_query)
 
-            Y_train = np_utils.to_categorical(y_train, 1502)
             X_train = np.array(X_train)
-            Y_test = np_utils.to_categorical(y_test, 1502)
+            Y_train = np_utils.to_categorical(y_train, 1502)
             X_test = np.array(X_test)
-            Y_query = np_utils.to_categorical(y_test, 1502)
-            X_query = np.array(X_test)
+            y_test = np.array(y_test, dtype=np.int32)
+            X_query = np.array(X_query)
+            y_query = np.array(y_query, dtype=np.int32)
             return {'X_train': X_train,
                     'Y_train': Y_train,
                     'X_test': X_test,
-                    'Y_test': Y_test,
+                    'y_test': y_test,
                     'X_query': X_query,
-                    'Y_query': Y_query,
+                    'y_query': y_query,
                    }
         else:
             raise ValueError(_("{filepath} not found, please, download it from {url}")

@@ -14,15 +14,6 @@ from .evaluate import evaluate as run_evaluate
 from .datasets import datasets, DatasetType
 from .models import models, ModelType
 
-class PrepareType(Enum):
-    """Prepare type"""
-    # datasets
-    market1501 = 'market1501'
-
-    # models
-    simple = 'simple'
-    vgg16 = 'vgg16'
-
 def prepare_dataset(args):
     """Prepare model."""
     print(_("Preparing {type}").format(type=args.type))
