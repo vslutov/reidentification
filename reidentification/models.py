@@ -21,7 +21,7 @@ from .i18n import _
 
 IMAGE_SHIFT = 0.2
 
-K.set_image_dim_ordering('tf')
+K.set_image_dim_ordering('th')
 
 def pop_layer(model):
     if not model.outputs:
@@ -44,16 +44,16 @@ class ReidModel:
     filepath = None
     model = None
 
-    # @classmethod
-    # def get(cls, *args, **kwargs):
-    #     """Get model."""
-    #     if cls.model is None:
-    #         if os.path.isfile(cls.filepath):
-    #             cls.model = load_model(cls.filepath)
-    #         else:
-    #             print(_("{filepath} not found... creating").format(filepath=cls.filepath))
-    #             cls.model = cls.prepare(*args, **kwargs)
-    #     return cls.model
+    @classmethod
+    def get(cls, *args, **kwargs):
+        """Get model."""
+        if cls.model is None:
+            if os.path.isfile(cls.filepath):
+                cls.model = load_model(cls.filepath)
+            else:
+                print(_("{filepath} not found... creating").format(filepath=cls.filepath))
+                cls.model = cls.prepare(*args, **kwargs)
+        return cls.model
 
     @classmethod
     def __init__(cls, *args, **kwargs):
@@ -67,7 +67,7 @@ class ReidModel:
 
 class NNClassificator(ReidModel):
 
-    def fit(self, X_train, Y_train):
+    def fit(self, X_train, Y_train, nb_epoch):
         """Save model after fit."""
         self.model.summary()
 
@@ -93,8 +93,9 @@ class NNClassificator(ReidModel):
     def prepare(cls, nb_epoch):
         model = cls()
         market1501 = datasets[DatasetType.market1501].get()
-        model.fit(market1501['X_train'], market1501['Y_train'])
+        model.fit(market1501['X_train'], market1501['Y_train'], nb_epoch=nb_epoch)
         model.save()
+        return model
 
 class FinalClassificator(ReidModel):
 
@@ -122,7 +123,7 @@ class Simple(NNClassificator):
         """Prepare simple model."""
         self.model = Sequential()
 
-        self.model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(128, 64, 3)))
+        self.model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(224, 224, 3)))
         self.model.add(Convolution2D(32, 3, 3, activation='relu'))
         self.model.add(MaxPooling2D(pool_size=(2,2)))
         self.model.add(Dropout(0.25))
