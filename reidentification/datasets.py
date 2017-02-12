@@ -111,28 +111,33 @@ class Market1501(Dataset):
 
         if os.path.isfile(MARKET1501_ZIP):
 
-            X_train, y_train, X_test, y_test = [], [], [], []
+            X_train, y_train, X_test, y_test, X_query, y_query = [], [], [], [], [], []
             train_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_train/' +
                                   r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
-            train_re2 = re.compile(r'^Market-1501-v15.09.15/bounding_box_test/' +
-                                   r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
-            test_re = re.compile(r'^Market-1501-v15.09.15/query/' +
+            test_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_test/' +
                                  r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
+            query_re = re.compile(r'^Market-1501-v15.09.15/query/' +
+                                  r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
 
             with ZipFile(MARKET1501_ZIP) as zip_file:
                 for filepath in zip_file.namelist():
                     load_jpg(filepath, train_re, X_train, y_train)
-                    load_jpg(filepath, train_re2, X_train, y_train)
-                    load_jpg(filepath, test_re, X_test, y_test)
+                    load_jpg(filepath, test_re, X_train, y_train)
+                    load_jpg(filepath, query_re, X_query, y_query)
 
             Y_train = np_utils.to_categorical(y_train, 1502)
             X_train = np.array(X_train)
             Y_test = np_utils.to_categorical(y_test, 1502)
             X_test = np.array(X_test)
+            Y_query = np_utils.to_categorical(y_test, 1502)
+            X_query = np.array(X_test)
             return {'X_train': X_train,
                     'Y_train': Y_train,
                     'X_test': X_test,
-                    'Y_test': Y_test}
+                    'Y_test': Y_test,
+                    'X_query': X_query,
+                    'Y_query': Y_query,
+                   }
         else:
             raise ValueError(_("{filepath} not found, please, download it from {url}")
                              .format(filepath=MARKET1501_ZIP,
