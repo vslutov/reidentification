@@ -22,7 +22,11 @@ def prepare_dataset(args):
 def prepare_model(args):
     """Prepare dataset."""
     print(_("Preparing {type}").format(type=args.type))
-    models[args.type].prepare(nb_epoch=args.nb_epoch)
+    dataset = datasets[DatasetType.market1501].get()
+    models[args.type].prepare(nb_epoch=args.nb_epoch,
+                              X_train=dataset['X_train'],
+                              y_train=dataset['y_train'],
+                             )
 
 def main():
     """Main function - parse command-line arguments and run function."""
@@ -33,6 +37,8 @@ def main():
     evaluate = subparsers.add_parser('evaluate', help=_("evaluate model"))
     evaluate.add_argument('type', choices=ModelType, type=ModelType, help=_("model type"))
     evaluate.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
+    evaluate.add_argument('--prepare', dest='prepare', action='store_true')
+    evaluate.set_defaults(prepare=False)
     evaluate.set_defaults(func=run_evaluate)
 
     prepare = subparsers.add_parser('prepare', help=_("prepare dataset or model"))

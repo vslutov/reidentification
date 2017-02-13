@@ -27,6 +27,10 @@ def get_data_folder() -> str:
         raise ValueError(_("Environment value {value} not found, please, set it to data folder")
                          .format(value=REIDENTIFICATION_DATA_FOLDER))
 
+def preprocess_cathegories(y):
+    vals = sorted(list(set(y)))
+    return np.array([vals.index(x) for x in y], dtype=np.int32)
+
 def get_filepath(filename: str, *args) -> str:
     """Get filepath for file from data_dir."""
     return os.path.join(get_data_folder(), filename, *args)
@@ -58,7 +62,7 @@ class Dataset:
                 cls.dataset = np.load(cls.filepath)
             else:
                 print(_("{filepath} not found... creating").format(filepath=cls.filepath))
-                cls.dataset = cls.prepare(cls, *args, **kwargs)
+                cls.dataset = cls.prepare(*args, **kwargs)
         return cls.dataset
 
     @classmethod
@@ -107,7 +111,7 @@ class Market1501(Dataset):
                 y.append(int(match.groups()[0]))
                 with zip_file.open(match.string) as image_file:
                     image = misc.imread(image_file).astype(np.float32) / 255
-                    image = misc.imresize(image, (224, 224))
+                    # image = misc.imresize(image, (224, 224))
                     image = image.transpose(2, 0, 1)
                     X.append(image)
 
@@ -115,26 +119,29 @@ class Market1501(Dataset):
 
             X_train, y_train, X_test, y_test, X_query, y_query = [], [], [], [], [], []
             train_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_train/' +
-                                  r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
+                                  r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
             test_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_test/' +
-                                 r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
+                                 r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
             query_re = re.compile(r'^Market-1501-v15.09.15/query/' +
-                                  r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg$')
+                                  r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
 
             with ZipFile(MARKET1501_ZIP) as zip_file:
                 for filepath in zip_file.namelist():
                     load_jpg(filepath, train_re, X_train, y_train)
-                    load_jpg(filepath, test_re, X_train, y_train)
+                    load_jpg(filepath, test_re, X_test, y_test)
                     load_jpg(filepath, query_re, X_query, y_query)
 
             X_train = np.array(X_train)
-            Y_train = np_utils.to_categorical(y_train, 1502)
+            y_train = preprocess_cathegories(y_train)
+
             X_test = np.array(X_test)
-            y_test = np.array(y_test, dtype=np.int32)
+            y_test = preprocess_cathegories(y_test)
+
             X_query = np.array(X_query)
-            y_query = np.array(y_query, dtype=np.int32)
+            y_query = preprocess_cathegories(y_query)
+
             return {'X_train': X_train,
-                    'Y_train': Y_train,
+                    'y_train': y_train,
                     'X_test': X_test,
                     'y_test': y_test,
                     'X_query': X_query,

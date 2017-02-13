@@ -8,13 +8,17 @@ import os.path
 from functools import wraps
 from enum import Enum
 
+import numpy as np
 from keras.models import Model, Sequential, load_model
 from keras.applications import VGG16 as BaseVGG16
 from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout
+from keras.utils import np_utils
+from keras import metrics
 from keras import backend as K
-from tabulate import tabulate
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.externals import joblib
+from tabulate import tabulate
 
 from .datasets import get_filepath, datasets, DatasetType
 from .i18n import _
@@ -22,6 +26,14 @@ from .i18n import _
 IMAGE_SHIFT = 0.2
 
 K.set_image_dim_ordering('th')
+
+def compile_score(func):
+    Y_query = K.placeholder(shape=(None, None))
+    proba = K.placeholder(shape=(None, None))
+    return K.function([Y_query, proba], func(Y_query, proba))
+
+accuracy_score = compile_score(metrics.categorical_accuracy)
+top_5_score = compile_score(metrics.top_k_categorical_accuracy)
 
 def pop_layer(model):
     if not model.outputs:
@@ -42,67 +54,90 @@ class ReidModel:
     """Abstract model class"""
 
     filepath = None
-    model = None
+    singleton = None
 
     @classmethod
-    def get(cls, *args, **kwargs):
-        """Get model."""
-        if cls.model is None:
+    def get(cls, *args, **kwds):
+        """Get singleton."""
+        ext = os.path.splitext(cls.filepath)[1]
+
+        if cls.singleton is None:
             if os.path.isfile(cls.filepath):
-                cls.model = load_model(cls.filepath)
+                if ext == '.h5':
+                    model = load_model(cls.filepath)
+                elif ext == '.pkl':
+                    model = joblib.load(cls.filepath)
+                else:
+                    raise NotImplementedError()
+                cls.singleton = cls(model=model)
             else:
                 print(_("{filepath} not found... creating").format(filepath=cls.filepath))
-                cls.model = cls.prepare(*args, **kwargs)
-        return cls.model
+                cls.singleton = cls.prepare(*args, **kwds)
+        return cls.singleton
+
+    def set_model(self, model):
+        if model is not None:
+            self.model = model
+            return True
+        else:
+            return False
 
     @classmethod
-    def __init__(cls, *args, **kwargs):
+    def __init__(cls, *args, **kwds):
         """Should be replaced in successor."""
         raise NotImplementedError()
 
+    def prepare(self, *args, **kwds):
+        raise NotImplementedError()
+
     def save(self):
-        """Save model after fit."""
-        self.model.save(self.filepath)
+        """Save singleton after fit."""
+        ext = os.path.splitext(self.filepath)[1]
+        if ext == '.h5':
+            self.model.save(self.filepath)
+        elif ext == '.pkl':
+            joblib.dump(self.model, self.filepath, compress=9)
 
 
 class NNClassificator(ReidModel):
 
-    def fit(self, X_train, Y_train, nb_epoch):
+    head_size = None
+
+    def fit(self, nb_epoch, X_train, y_train):
         """Save model after fit."""
         self.model.summary()
 
-        datagen = ImageDataGenerator(width_shift_range=IMAGE_SHIFT,
-                                     height_shift_range=IMAGE_SHIFT,
+        datagen = ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
+                                     # height_shift_range=IMAGE_SHIFT,
                                      vertical_flip=True
                                     )
         datagen.fit(X_train)
 
-        for i in range(nb_epoch):
-            print("Epoch", i + 1, "/", nb_epoch)
-            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                     samples_per_epoch=len(X_train), nb_epoch=1, verbose=1)
-            print(tabulate([self.model.evaluate(X_test, Y_test, verbose=1)],
-                            headers=self.model.metrics_names))
+        Y_train = np_utils.to_categorical(y_train)
+
+        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
+                                 samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
 
     def get_indexator(self):
-        model = Model(self.model.input, self.model.layers[-2].output)
+        model = Model(self.model.input, self.model.layers[-1-self.head_size].output)
         model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
         return model
 
     @classmethod
-    def prepare(cls, nb_epoch):
-        model = cls()
-        market1501 = datasets[DatasetType.market1501].get()
-        model.fit(market1501['X_train'], market1501['Y_train'], nb_epoch=nb_epoch)
+    def prepare(cls, nb_epoch, X_train, y_train):
+        model = cls(input_shape=X_train[0, :, :, :].shape, count=y_train.max() + 1)
+        model.fit(X_train=X_train, y_train=y_train, nb_epoch=nb_epoch)
         model.save()
         return model
 
-class FinalClassificator(ReidModel):
+class FinalClassifier(ReidModel):
 
-    filename = get_filepath("classificator.h5")
+    filepath = get_filepath('classifier.pkl')
+    metrics_names = ['accuracy score', 'top 5 score']
 
-    def __init__(self, indexator):
-        self.indexator = indexator
+    def __init__(self, indexator=None, model=None):
+        if not self.set_model(model):
+            self.indexator = indexator
 
     def fit(self, X_test, y_test):
         X_feature = self.indexator.predict(X_test)
@@ -110,29 +145,45 @@ class FinalClassificator(ReidModel):
         self.model.fit(X_feature, y_test)
 
     def predict(self, X_query):
-        X_query = self.indexator.predict(X_query)
-        return self.model.predict_proba(X_query)
+        X_feature = self.indexator.predict(X_query)
+        return self.model.predict_proba(X_feature)
+
+    @classmethod
+    def prepare(cls, indexator, X_test, y_test):
+        model = cls(indexator)
+        model.fit(X_test=X_test,
+                  y_test=y_test,
+                 )
+        model.save()
+        return model
+
+    def evaluate(self, X_query, y_query):
+        proba = self.predict(X_query)
+        Y_query = np_utils.to_categorical(y_query)
+        return [accuracy_score((Y_query, proba)), top_5_score((Y_query, proba))]
 
 class Simple(NNClassificator):
 
     """Simple model"""
 
     filepath = get_filepath('simple.h5')
+    head_size = 2
 
-    def __init__(self):
+    def __init__(self, input_shape=None, count=None, model=None):
         """Prepare simple model."""
-        self.model = Sequential()
+        if not self.set_model(model):
+            self.model = Sequential()
 
-        self.model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=(224, 224, 3)))
-        self.model.add(Convolution2D(32, 3, 3, activation='relu'))
-        self.model.add(MaxPooling2D(pool_size=(2,2)))
-        self.model.add(Dropout(0.25))
-        self.model.add(Flatten())
-        self.model.add(Dense(128, activation='relu'))
-        self.model.add(Dropout(0.5))
-        self.model.add(Dense(1502, activation='softmax'))
+            self.model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=input_shape))
+            self.model.add(Convolution2D(32, 3, 3, activation='relu'))
+            self.model.add(MaxPooling2D(pool_size=(2,2)))
+            self.model.add(Dropout(0.25))
+            self.model.add(Flatten())
+            self.model.add(Dense(128, activation='relu'))
+            self.model.add(Dropout(0.5))
+            self.model.add(Dense(count, activation='softmax'))
 
-        self.model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy', 'top_k_categorical_accuracy'])
+            self.model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy', 'top_k_categorical_accuracy'])
 
 class VGG16(ReidModel):
 
@@ -162,7 +213,9 @@ class ModelType(Enum):
 
     simple = 'simple'
     vgg16 = 'vgg16'
+    final_classifier = 'final_classifier'
 
 models = {ModelType.simple: Simple,
-          ModelType.vgg16: VGG16
+          ModelType.vgg16: VGG16,
+          ModelType.final_classifier: FinalClassifier,
          }
