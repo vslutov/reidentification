@@ -12,7 +12,7 @@ from enum import Enum
 from .i18n import _
 from .evaluate import evaluate as run_evaluate
 from .datasets import datasets, DatasetType
-from .models import models, ModelType
+from .models import models, ModelType, ClassifierType
 
 def prepare_dataset(args):
     """Prepare model."""
@@ -35,7 +35,8 @@ def main():
     subparsers = parser.add_subparsers(title='actions', help=_("system actions"))
 
     evaluate = subparsers.add_parser('evaluate', help=_("evaluate model"))
-    evaluate.add_argument('type', choices=ModelType, type=ModelType, help=_("model type"))
+    evaluate.add_argument('model', choices=ModelType, type=ModelType, help=_("model type"))
+    evaluate.add_argument('classifier', choices=ClassifierType, type=ClassifierType, help=_("model type"))
     evaluate.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
     evaluate.add_argument('--prepare', dest='prepare', action='store_true')
     evaluate.set_defaults(prepare=False)

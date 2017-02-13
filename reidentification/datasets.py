@@ -119,11 +119,11 @@ class Market1501(Dataset):
 
             X_train, y_train, X_test, y_test, X_query, y_query = [], [], [], [], [], []
             train_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_train/' +
-                                  r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
+                                  r'(-?\d+)_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
             test_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_test/' +
-                                 r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
+                                 r'(-?\d+)_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
             query_re = re.compile(r'^Market-1501-v15.09.15/query/' +
-                                  r'(\d{4})_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
+                                  r'(-?\d+)_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
 
             with ZipFile(MARKET1501_ZIP) as zip_file:
                 for filepath in zip_file.namelist():
@@ -138,7 +138,7 @@ class Market1501(Dataset):
             y_test = preprocess_cathegories(y_test)
 
             X_query = np.array(X_query)
-            y_query = preprocess_cathegories(y_query)
+            y_query = preprocess_cathegories(y_query) + 2
 
             return {'X_train': X_train,
                     'y_train': y_train,

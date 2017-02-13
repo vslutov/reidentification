@@ -17,7 +17,9 @@ from keras.utils import np_utils
 from keras import metrics
 from keras import backend as K
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import LinearSVC
 from sklearn.externals import joblib
+from sklearn.calibration import CalibratedClassifierCV
 from tabulate import tabulate
 
 from .datasets import get_filepath, datasets, DatasetType
@@ -32,8 +34,13 @@ def compile_score(func):
     proba = K.placeholder(shape=(None, None))
     return K.function([Y_query, proba], func(Y_query, proba))
 
+crossentropy_score = compile_score(metrics.categorical_crossentropy)
 accuracy_score = compile_score(metrics.categorical_accuracy)
 top_5_score = compile_score(metrics.top_k_categorical_accuracy)
+
+def softmax(decision_function):
+    exp = np.exp(decision_function)
+    return exp / exp.sum(axis=1).reshape((-1, 1))
 
 def pop_layer(model):
     if not model.outputs:
@@ -130,23 +137,16 @@ class NNClassificator(ReidModel):
         model.save()
         return model
 
-class FinalClassifier(ReidModel):
+class LastClassifier(ReidModel):
 
-    filepath = get_filepath('classifier.pkl')
-    metrics_names = ['accuracy score', 'top 5 score']
+    metrics_names = ['crossentropy', 'accuracy', 'top 5 score']
 
-    def __init__(self, indexator=None, model=None):
-        if not self.set_model(model):
-            self.indexator = indexator
+    def __init__(self, indexator, model=None):
+        self.indexator = indexator
 
     def fit(self, X_test, y_test):
         X_feature = self.indexator.predict(X_test)
-        self.model = KNeighborsClassifier(n_neighbors=3)
         self.model.fit(X_feature, y_test)
-
-    def predict(self, X_query):
-        X_feature = self.indexator.predict(X_query)
-        return self.model.predict_proba(X_feature)
 
     @classmethod
     def prepare(cls, indexator, X_test, y_test):
@@ -157,10 +157,42 @@ class FinalClassifier(ReidModel):
         model.save()
         return model
 
+    def predict(self, X_query):
+        X_feature = self.indexator.predict(X_query)
+        return self.model.predict(X_feature)
+
+    def predict_proba(self, X_feature):
+        return self.model.predict_proba(X_feature)
+
     def evaluate(self, X_query, y_query):
-        proba = self.predict(X_query)
+        X_feature = self.indexator.predict(X_query)
+        proba = self.predict_proba(X_feature)
         Y_query = np_utils.to_categorical(y_query)
-        return [accuracy_score((Y_query, proba)), top_5_score((Y_query, proba))]
+        return [crossentropy_score((Y_query, proba)),
+                accuracy_score((Y_query, proba)),
+                top_5_score((Y_query, proba))
+               ]
+
+class KNC(LastClassifier):
+
+    filepath = get_filepath('knc.pkl')
+
+    def __init__(self, indexator, model=None):
+        super().__init__(indexator, model)
+        if not self.set_model(model):
+            self.model = KNeighborsClassifier(n_neighbors=3)
+
+class SVC(LastClassifier):
+
+    filepath = get_filepath('svc.pkl')
+
+    def __init__(self, indexator, model=None):
+        super().__init__(indexator, model)
+        if not self.set_model(model):
+            self.model = LinearSVC()
+
+    def predict_proba(self, X_feature):
+        return softmax(self.model.decision_function(X_feature))
 
 class Simple(NNClassificator):
 
@@ -213,9 +245,13 @@ class ModelType(Enum):
 
     simple = 'simple'
     vgg16 = 'vgg16'
-    final_classifier = 'final_classifier'
+
+class ClassifierType(Enum):
+    knc = 'knc'
+    svc = 'svc'
 
 models = {ModelType.simple: Simple,
           ModelType.vgg16: VGG16,
-          ModelType.final_classifier: FinalClassifier,
+          ClassifierType.knc: KNC,
+          ClassifierType.svc: SVC,
          }
