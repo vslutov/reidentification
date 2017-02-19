@@ -16,7 +16,7 @@ from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten
 from keras.utils import np_utils
 from keras import metrics
 from keras import backend as K
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn import neighbors
 from sklearn.svm import LinearSVC
 from sklearn.externals import joblib
 from sklearn.calibration import CalibratedClassifierCV
@@ -161,17 +161,49 @@ class LastClassifier(ReidModel):
         X_feature = self.indexator.predict(X_query)
         return self.model.predict(X_feature)
 
-    def predict_proba(self, X_feature):
+    def _predict_proba(self, X_feature):
         return self.model.predict_proba(X_feature)
 
     def evaluate(self, X_query, y_query):
         X_feature = self.indexator.predict(X_query)
-        proba = self.predict_proba(X_feature)
+        proba = self._predict_proba(X_feature)
         Y_query = np_utils.to_categorical(y_query)
-        return [crossentropy_score((Y_query, proba)),
+        return (crossentropy_score((Y_query, proba)),
                 accuracy_score((Y_query, proba)),
-                top_5_score((Y_query, proba))
-               ]
+                top_5_score((Y_query, proba)),
+               )
+
+class FeatureDistance(LastClassifier):
+
+    N_NEIGHBORS = 5
+    metrics_name = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS)]
+
+    def __init__(self, indexator):
+        super().__init__(indexator, model)
+        self.y_test = None
+        if not self.set_model(model):
+            self.model = neighbors.NearestNeighbors(n_neighbors=N_NEIGHBORS, algorithm='brute', metric='euclidean')
+
+    def fit(X_test, y_test):
+        X_feature = self.indexator.predict(X_test)
+        self.fit(X_feature)
+        self.y_test = y_test
+
+    def predict(self, X_query):
+        X_feature = self.indexator.predict(X_query)
+        neighbors = self.model.kneighbors(X_feature, n_neighbors=1, return_distance=False).reshape((-1,))
+        return self.y_test(neighbors)
+
+    def evaluate(self, X_query, y_query):
+        X_feature = self.indexator.predict(X_query)
+        neighbors = self.model.kneighbors(X_feature, return_distance=False)
+        y_pred = self.y_test[neighbors]
+        y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * N_NEIGHBORS)
+        positive = y_pred == y_true
+        print(positive.shape)
+        return (positive[:, 1].sum() / y_query.size,
+                positive.max(axis=1).sum() / y_query.size,
+               )
 
 class KNC(LastClassifier):
 
@@ -180,7 +212,7 @@ class KNC(LastClassifier):
     def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
         if not self.set_model(model):
-            self.model = KNeighborsClassifier(n_neighbors=3)
+            self.model = neighbors.KNeighborsClassifier(n_neighbors=3)
 
 class SVC(LastClassifier):
 
@@ -191,7 +223,7 @@ class SVC(LastClassifier):
         if not self.set_model(model):
             self.model = LinearSVC()
 
-    def predict_proba(self, X_feature):
+    def _predict_proba(self, X_feature):
         return softmax(self.model.decision_function(X_feature))
 
 class Simple(NNClassificator):
@@ -249,9 +281,11 @@ class ModelType(Enum):
 class ClassifierType(Enum):
     knc = 'knc'
     svc = 'svc'
+    distance = 'distance'
 
 models = {ModelType.simple: Simple,
           ModelType.vgg16: VGG16,
           ClassifierType.knc: KNC,
           ClassifierType.svc: SVC,
+          ClassifierType.distance: FeatureDistance,
          }
