@@ -25,10 +25,10 @@ def evaluate(args):
                                        y_train=dataset['y_train'],
                                       )
 
-    model = models[args.classifier].prepare(indexator=model.get_indexator(),
-                                                  X_test=dataset['X_test'],
-                                                  y_test=dataset['y_test'],
-                                                 )
+    classifier = models[args.classifier].prepare(indexator=model.get_indexator(),
+                                                 X_test=dataset['X_test'],
+                                                 y_test=dataset['y_test'],
+                                                )
 
-    print(tabulate([model.evaluate(dataset['X_query'], dataset['y_query'])],
-                   headers=model.metrics_names))
+    print(tabulate([classifier.evaluate(dataset['X_query'], dataset['y_query'])],
+                   headers=classifier.metric_names))

@@ -66,19 +66,20 @@ class ReidModel:
     @classmethod
     def get(cls, *args, **kwds):
         """Get singleton."""
-        ext = os.path.splitext(cls.filepath)[1]
+        filepath = get_filepath(cls.filepath)
+        prefix, ext = os.path.splitext(filepath)
 
         if cls.singleton is None:
-            if os.path.isfile(cls.filepath):
+            if os.path.isfile(filepath):
                 if ext == '.h5':
-                    model = load_model(cls.filepath)
+                    model = load_model(filepath)
                 elif ext == '.pkl':
-                    model = joblib.load(cls.filepath)
+                    model = joblib.load(filepath)
                 else:
                     raise NotImplementedError()
                 cls.singleton = cls(model=model)
             else:
-                print(_("{filepath} not found... creating").format(filepath=cls.filepath))
+                print(_("{filepath} not found... creating").format(filepath=filepath))
                 cls.singleton = cls.prepare(*args, **kwds)
         return cls.singleton
 
@@ -99,11 +100,12 @@ class ReidModel:
 
     def save(self):
         """Save singleton after fit."""
-        ext = os.path.splitext(self.filepath)[1]
+        filepath = get_filepath(self.filepath)
+        ext = os.path.splitext(filepath)[1]
         if ext == '.h5':
-            self.model.save(self.filepath)
+            self.model.save(filepath)
         elif ext == '.pkl':
-            joblib.dump(self.model, self.filepath, compress=9)
+            joblib.dump(self.model, filepath, compress=9)
 
 
 class NNClassificator(ReidModel):
@@ -139,7 +141,7 @@ class NNClassificator(ReidModel):
 
 class LastClassifier(ReidModel):
 
-    metrics_names = ['crossentropy', 'accuracy', 'top 5 score']
+    metric_names = ['crossentropy', 'accuracy', 'top 5 score']
 
     def __init__(self, indexator, model=None):
         self.indexator = indexator
@@ -175,18 +177,20 @@ class LastClassifier(ReidModel):
 
 class FeatureDistance(LastClassifier):
 
-    N_NEIGHBORS = 5
-    metrics_name = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS)]
+    filepath = 'distance.pkl'
 
-    def __init__(self, indexator):
+    N_NEIGHBORS = 5
+    metric_names = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS)]
+
+    def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
         self.y_test = None
         if not self.set_model(model):
-            self.model = neighbors.NearestNeighbors(n_neighbors=N_NEIGHBORS, algorithm='brute', metric='euclidean')
+            self.model = neighbors.NearestNeighbors(n_neighbors=self.N_NEIGHBORS)
 
-    def fit(X_test, y_test):
+    def fit(self, X_test, y_test):
         X_feature = self.indexator.predict(X_test)
-        self.fit(X_feature)
+        self.model.fit(X_feature)
         self.y_test = y_test
 
     def predict(self, X_query):
@@ -197,17 +201,17 @@ class FeatureDistance(LastClassifier):
     def evaluate(self, X_query, y_query):
         X_feature = self.indexator.predict(X_query)
         neighbors = self.model.kneighbors(X_feature, return_distance=False)
+
         y_pred = self.y_test[neighbors]
-        y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * N_NEIGHBORS)
+        y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * self.N_NEIGHBORS)
         positive = y_pred == y_true
-        print(positive.shape)
         return (positive[:, 1].sum() / y_query.size,
                 positive.max(axis=1).sum() / y_query.size,
                )
 
 class KNC(LastClassifier):
 
-    filepath = get_filepath('knc.pkl')
+    filepath = 'knc.pkl'
 
     def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
@@ -216,7 +220,7 @@ class KNC(LastClassifier):
 
 class SVC(LastClassifier):
 
-    filepath = get_filepath('svc.pkl')
+    filepath = 'svc.pkl'
 
     def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
@@ -230,46 +234,50 @@ class Simple(NNClassificator):
 
     """Simple model"""
 
-    filepath = get_filepath('simple.h5')
+    filepath = 'simple.h5'
     head_size = 2
 
     def __init__(self, input_shape=None, count=None, model=None):
         """Prepare simple model."""
         if not self.set_model(model):
-            self.model = Sequential()
+            inputs = Input(shape=input_shape)
 
-            self.model.add(Convolution2D(32, 3, 3, activation='relu', input_shape=input_shape))
-            self.model.add(Convolution2D(32, 3, 3, activation='relu'))
-            self.model.add(MaxPooling2D(pool_size=(2,2)))
-            self.model.add(Dropout(0.25))
-            self.model.add(Flatten())
-            self.model.add(Dense(128, activation='relu'))
-            self.model.add(Dropout(0.5))
-            self.model.add(Dense(count, activation='softmax'))
+            top = Convolution2D(32, 3, 3, activation='relu')(inputs)
+            top = Convolution2D(32, 3, 3, activation='relu')(top)
+            top = MaxPooling2D(pool_size=(2,2))(top)
+            top = Dropout(0.25)(top)
+            top = Flatten()(top)
+            top = Dense(128, activation='relu')(top)
+            top = Dropout(0.5)(top)
+            top = Dense(count, activation='softmax')(top)
 
-            self.model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy', 'top_k_categorical_accuracy'])
+            self.model = Model(inputs, top)
+            self.model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
 
-class VGG16(ReidModel):
+class VGG16(NNClassificator):
 
     """VGG16 model"""
 
-    filepath = get_filepath('vgg16.h5')
+    filepath = 'vgg16.h5'
+    head_size = 2
 
-    # @classmethod
-    # @save_model
-    # def prepare(cls, nb_epoch):
-    #     """Prepare VGG model."""
-    #     base_model = BaseVGG16(include_top=True)
-    #     base_model.layers.pop()
-    #     for layer in base_model.layers:
-    #         layer.trainable = False
-    #     top = base_model.layers[-1].output
-    #     top = Dropout(0.5)(top)
-    #     top = Dense(1502, activation='softmax')(top)
-    #     model = Model(base_model.input, top)
+    @classmethod
+    def __init__(self, input_shape=None, count=None, model=None):
+        """Prepare vgg16 model."""
+        if not self.set_model(self, model):
+            base_model = BaseVGG16(include_top=False, input_shape=input_shape)
+            for layer in base_model.layers:
+                layer.trainable = False
+            top = base_model.layers[-1].output
+            top = Flatten()(top)
+            top = Dense(128, activation='relu')(top)
+            top = Dropout(0.25)(top)
+            top = Dense(128, activation='relu')(top)
+            top = Dropout(0.5)(top)
+            top = Dense(count, activation='softmax')(top)
+            self.model = Model(base_model.input, top)
 
-    #     model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
-    #     return model
+            self.model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
 
 class ModelType(Enum):
 
