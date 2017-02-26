@@ -146,8 +146,11 @@ class LastClassifier(ReidModel):
     def __init__(self, indexator, model=None):
         self.indexator = indexator
 
+    def index(self, X_test):
+        return self.indexator.predict(X_test)
+
     def fit(self, X_test, y_test):
-        X_feature = self.indexator.predict(X_test)
+        X_feature = self.index(X_test)
         self.model.fit(X_feature, y_test)
 
     @classmethod
@@ -160,14 +163,14 @@ class LastClassifier(ReidModel):
         return model
 
     def predict(self, X_query):
-        X_feature = self.indexator.predict(X_query)
+        X_feature = self.index(X_query)
         return self.model.predict(X_feature)
 
     def _predict_proba(self, X_feature):
         return self.model.predict_proba(X_feature)
 
     def evaluate(self, X_query, y_query):
-        X_feature = self.indexator.predict(X_query)
+        X_feature = self.index(X_query)
         proba = self._predict_proba(X_feature)
         Y_query = np_utils.to_categorical(y_query)
         return (crossentropy_score((Y_query, proba)),
@@ -189,17 +192,17 @@ class FeatureDistance(LastClassifier):
             self.model = neighbors.NearestNeighbors(n_neighbors=self.N_NEIGHBORS)
 
     def fit(self, X_test, y_test):
-        X_feature = self.indexator.predict(X_test)
+        X_feature = self.index(X_test)
         self.model.fit(X_feature)
         self.y_test = y_test
 
     def predict(self, X_query):
-        X_feature = self.indexator.predict(X_query)
+        X_feature = self.index(X_query)
         neighbors = self.model.kneighbors(X_feature, n_neighbors=1, return_distance=False).reshape((-1,))
         return self.y_test(neighbors)
 
     def evaluate(self, X_query, y_query):
-        X_feature = self.indexator.predict(X_query)
+        X_feature = self.index(X_query)
         neighbors = self.model.kneighbors(X_feature, return_distance=False)
 
         y_pred = self.y_test[neighbors]
