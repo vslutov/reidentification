@@ -12,7 +12,7 @@ import numpy as np
 from keras.models import Model, Sequential, load_model
 from keras.applications import VGG16 as BaseVGG16
 from keras.preprocessing.image import ImageDataGenerator
-from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout
+from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout, GlobalAveragePooling2D
 from keras.utils import np_utils
 from keras import metrics
 from keras import backend as K
@@ -259,7 +259,7 @@ class VGG16(NNClassificator):
     """VGG16 model"""
 
     filepath = 'vgg16.h5'
-    head_size = 2
+    head_size = 1
 
     @classmethod
     def __init__(self, input_shape=None, count=None, model=None):
@@ -269,11 +269,7 @@ class VGG16(NNClassificator):
             for layer in base_model.layers:
                 layer.trainable = False
             top = base_model.layers[-1].output
-            top = Flatten()(top)
-            top = Dense(128, activation='relu')(top)
-            top = Dropout(0.25)(top)
-            top = Dense(128, activation='relu')(top)
-            top = Dropout(0.5)(top)
+            top = GlobalAveragePooling2D()(top)
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
 
