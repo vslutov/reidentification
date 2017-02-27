@@ -7,12 +7,14 @@
 import os.path
 from functools import wraps
 from enum import Enum
+from pprint import pprint
 
 import numpy as np
 from keras.models import Model, Sequential, load_model
 from keras.applications import VGG16 as BaseVGG16
 from keras.preprocessing.image import ImageDataGenerator
-from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout, GlobalAveragePooling2D
+from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout, GlobalAveragePooling2D, BatchNormalization
+from keras.optimizers import Nadam
 from keras.utils import np_utils
 from keras import metrics
 from keras import backend as K
@@ -139,6 +141,10 @@ class NNClassificator(ReidModel):
         model.save()
         return model
 
+    def compile(self, lrm=0.002):
+        self.model.compile(loss='categorical_crossentropy', optimizer=Nadam(lr=0.002 * lrm),
+                           metrics=['accuracy'])
+
 class LastClassifier(ReidModel):
 
     metric_names = ['crossentropy', 'accuracy', 'top 5 score']
@@ -255,28 +261,58 @@ class Simple(NNClassificator):
             top = Dense(count, activation='softmax')(top)
 
             self.model = Model(inputs, top)
-            self.model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
+            self.compile()
 
 class VGG16(NNClassificator):
 
     """VGG16 model"""
 
     filepath = 'vgg16.h5'
-    head_size = 1
+    head_size = 2
 
-    @classmethod
     def __init__(self, input_shape=None, count=None, model=None):
         """Prepare vgg16 model."""
-        if not self.set_model(self, model):
+        SLICE_LAYERS = 4
+
+        if not self.set_model(model):
             base_model = BaseVGG16(include_top=False, input_shape=input_shape)
+            for i in range(SLICE_LAYERS):
+                pop_layer(base_model)
             for layer in base_model.layers:
                 layer.trainable = False
             top = base_model.layers[-1].output
             top = GlobalAveragePooling2D()(top)
+            top = BatchNormalization()(top)
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
+            self.compile()
 
-            self.model.compile(loss='categorical_crossentropy', optimizer='nadam', metrics=['accuracy'])
+    def unfreeze(self):
+        for layer in self.model.layers:
+            layer.trainable = True
+
+    def fit(self, nb_epoch, X_train, y_train):
+        """Save model after fit."""
+        self.model.summary()
+
+        datagen = ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
+                                     # height_shift_range=IMAGE_SHIFT,
+                                     vertical_flip=True
+                                    )
+        datagen.fit(X_train)
+
+        Y_train = np_utils.to_categorical(y_train)
+
+        print("First stage: learn top")
+        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
+                                 samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+
+        self.unfreeze()
+        self.compile(0.1)
+
+        print("Second stage: fine-tune")
+        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
+                                 samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
 
 class ModelType(Enum):
 
