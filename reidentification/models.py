@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Neuronet reidentification model.
 """
@@ -268,7 +266,7 @@ class VGG16(NNClassificator):
     """VGG16 model"""
 
     filepath = 'vgg16.h5'
-    head_size = 2
+    head_size = 1
 
     def __init__(self, input_shape=None, count=None, model=None):
         """Prepare vgg16 model."""
