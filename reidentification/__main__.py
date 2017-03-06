@@ -40,6 +40,8 @@ def main():
     evaluate.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
     evaluate.add_argument('--prepare', dest='prepare', action='store_true')
     evaluate.set_defaults(prepare=False)
+    evaluate.add_argument('--triplets', dest='triplets', action='store_true')
+    evaluate.set_defaults(triplets=False)
     evaluate.set_defaults(func=run_evaluate)
 
     prepare = subparsers.add_parser('prepare', help=_("prepare dataset or model"))
@@ -52,6 +54,8 @@ def main():
     model = prepare_subparsers.add_parser('model', help=_("prepare model"))
     model.add_argument('type', choices=ModelType, type=ModelType, help=_("model"))
     model.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
+    model.add_argument('--triplets', dest='triplets', action='store_true')
+    model.set_defaults(triplets=False)
     model.set_defaults(func=prepare_model)
 
     args = parser.parse_args()

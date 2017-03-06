@@ -18,11 +18,13 @@ def evaluate(args):
         model = models[args.model].prepare(nb_epoch=args.nb_epoch,
                                            X_train=dataset['X_train'],
                                            y_train=dataset['y_train'],
+                                           triplets=args.triplets,
                                           )
     else:
         model = models[args.model].get(nb_epoch=args.nb_epoch,
                                        X_train=dataset['X_train'],
                                        y_train=dataset['y_train'],
+                                       triplets=args.triplets,
                                       )
 
     classifier = models[args.classifier].prepare(indexator=model.get_indexator(),
