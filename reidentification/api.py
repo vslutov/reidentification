@@ -5,13 +5,14 @@
 
 from warnings import warn
 
-from scipy.misc import imresize
+from skimage.transform import resize
+from skimage.io import imread
 
 from .models import models, ModelType
 from .datasets import datasets, DatasetType
 
 class ReidentificationFeatureBuilder(object):
-    def __init__(self, model=ModelType.VGG16, dataset=DatasetType.market1501):
+    def __init__(self, model=ModelType.vgg16, dataset=DatasetType.market1501):
         """Init feature bulder."""
         dataset = datasets[dataset].get()
         model = models[model].get(nb_epoch=10,
@@ -21,39 +22,28 @@ class ReidentificationFeatureBuilder(object):
                                  )
         self.input_shape = dataset['X_train'].shape[2:]
         self.indexator = model.get_indexator()
-        print(self.input_shape)
 
-    def generate_reidentification_features(self, im, bboxes):
+    def generate_reidentification_features(self, image, bboxes):
         """Generate reidentification features."""
         X_test = []
         for bbox in bboxes:
-            bbox = im[bbox["right"]:bbox["right"] + bbox["height"], bbox["left"]:bbox["left"] + bbox["width"]]
-            bbox = imresize(bbox, self.input_shape)
-            print(bbox.shape)
+            bbox = image[bbox["top"]:bbox["top"] + bbox["height"], bbox["left"]:bbox["left"] + bbox["width"]]
+            bbox = resize(bbox, self.input_shape).transpose((2, 1, 0))
+            X_test.append(bbox)
+        return self.indexator.predict(X_test)
 
-    def free(slef):
+    def free(self):
         """Free resources."""
         warn('Not implemented yet')
 
-def evaluate(args):
-    """Evaluate model and print result."""
-    if args.prepare:
-        model = models[args.model].prepare(nb_epoch=args.nb_epoch,
-                                           X_train=dataset['X_train'],
-                                           y_train=dataset['y_train'],
-                                           triplets=args.triplets,
-                                          )
-    else:
-        model = models[args.model].get(nb_epoch=args.nb_epoch,
-                                       X_train=dataset['X_train'],
-                                       y_train=dataset['y_train'],
-                                       triplets=args.triplets,
-                                      )
-
-    classifier = models[args.classifier].prepare(indexator=model.get_indexator(),
-                                                 X_test=dataset['X_test'],
-                                                 y_test=dataset['y_test'],
-                                                )
-
-    print(tabulate([classifier.evaluate(dataset['X_query'], dataset['y_query'])],
-                   headers=classifier.metric_names))
+def test():
+    image = imread("sample.jpg")
+    feature_builder = ReidentificationFeatureBuilder()
+    bboxes = [
+      {"left": 10 + 10 * x, "top": 10 + 10 * x, "width": 10, "height": 10}
+      for x in range(10)
+    ]
+    reidentification_features = feature_builder.generate_reidentification_features(image, bboxes)
+    print(reidentification_features)
+    print(reidentification_features.shape)
+    features_builder.free() # если нужно какое-то отдельное высвобождение ресурсов

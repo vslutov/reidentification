@@ -13,7 +13,8 @@ from functools import wraps
 import numpy as np
 from keras.datasets import mnist
 from keras.utils import np_utils
-from scipy import misc
+from skimage.transform import resize
+from skimage.io import imread
 
 from .i18n import _
 
@@ -110,9 +111,9 @@ class Market1501(Dataset):
             if match:
                 y.append(int(match.groups()[0]))
                 with zip_file.open(match.string) as image_file:
-                    image = misc.imread(image_file).astype(np.float32) / 255
-                    # image = misc.imresize(image, (224, 224))
-                    image = image.transpose(2, 0, 1)
+                    image = imread(image_file).astype(np.float32) / 255
+                    # image = resize(image, (224, 224))
+                    image = image.transpose((2, 0, 1))
                     X.append(image)
 
         if os.path.isfile(MARKET1501_ZIP):

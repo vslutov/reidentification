@@ -1,5 +1,4 @@
 from keras import backend as K
-import numpy as np
 
 def triplet_loss(y_true, y_pred):
 
