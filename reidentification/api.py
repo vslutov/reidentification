@@ -5,6 +5,7 @@
 
 from warnings import warn
 
+import numpy as np
 from skimage.transform import resize
 from skimage.io import imread
 
@@ -28,15 +29,15 @@ class ReidentificationFeatureBuilder(object):
         X_test = []
         for bbox in bboxes:
             bbox = image[bbox["top"]:bbox["top"] + bbox["height"], bbox["left"]:bbox["left"] + bbox["width"]]
-            bbox = resize(bbox, self.input_shape).transpose((2, 1, 0))
+            bbox = resize(bbox, self.input_shape).transpose((2, 0, 1))
             X_test.append(bbox)
-        return self.indexator.predict(X_test)
+        return self.indexator.predict(np.array(X_test))
 
     def free(self):
         """Free resources."""
         warn('Not implemented yet')
 
-def test():
+def _test():
     image = imread("sample.jpg")
     feature_builder = ReidentificationFeatureBuilder()
     bboxes = [
@@ -44,6 +45,4 @@ def test():
       for x in range(10)
     ]
     reidentification_features = feature_builder.generate_reidentification_features(image, bboxes)
-    print(reidentification_features)
-    print(reidentification_features.shape)
-    features_builder.free() # если нужно какое-то отдельное высвобождение ресурсов
+    feature_builder.free()
