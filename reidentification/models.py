@@ -294,7 +294,6 @@ class VGG16(NNClassifier):
             top = base_model.layers[-1].output
             top = GlobalAveragePooling2D()(top)
             top = BatchNormalization()(top)
-            # top = Dropout(0.5)(top)
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
             self.compile()
