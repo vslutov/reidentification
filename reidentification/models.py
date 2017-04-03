@@ -293,9 +293,8 @@ class VGG16(NNClassifier):
                 layer.trainable = False
             top = base_model.layers[-1].output
             top = GlobalAveragePooling2D()(top)
-            # Doesn't work with triplet loss
-            # top = BatchNormalization()(top)
-            top = Dropout(0.5)(top)
+            top = BatchNormalization()(top)
+            # top = Dropout(0.5)(top)
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
             self.compile()

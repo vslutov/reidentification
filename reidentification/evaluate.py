@@ -13,7 +13,7 @@ from .datasets import datasets, DatasetType
 
 def evaluate(args):
     """Evaluate model and print result."""
-    dataset = datasets[DatasetType.market1501].get()
+    dataset = datasets[args.dataset].get()
     if args.prepare:
         model = models[args.model].prepare(nb_epoch=args.nb_epoch,
                                            X_train=dataset['X_train'],

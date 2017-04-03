@@ -37,6 +37,7 @@ def main():
     evaluate = subparsers.add_parser('evaluate', help=_("evaluate model"))
     evaluate.add_argument('model', choices=ModelType, type=ModelType, help=_("model type"))
     evaluate.add_argument('classifier', choices=ClassifierType, type=ClassifierType, help=_("model type"))
+    evaluate.add_argument('dataset', choices=DatasetType, type=DatasetType, help=_("dataset type"))
     evaluate.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
     evaluate.add_argument('--prepare', dest='prepare', action='store_true')
     evaluate.set_defaults(prepare=False)
