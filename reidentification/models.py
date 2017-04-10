@@ -147,8 +147,9 @@ class NNClassifier(ReidModel):
         model.save()
         return model
 
-    def compile(self, lrm=0.002, loss='categorical_crossentropy'):
-        optimizer = Nadam(lr=0.01 * lrm)
+    def compile(self, lrm=1, loss='categorical_crossentropy'):
+        optimizer = Nadam(lr=0.002 * lrm)
+        print(optimizer)
         self.model.compile(loss=loss, optimizer=optimizer,
                            metrics=['accuracy'])
 
@@ -316,15 +317,16 @@ class VGG16(NNClassifier):
             Y_train = np_utils.to_categorical(y_train)
 
             print("First stage: learn top")
-            # self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-            #                          samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+            self.compile(0.02)
+            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
+                                     samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
 
             self.unfreeze()
             self.compile(0.1)
 
             print("Second stage: fine-tune")
-            # self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-            #                          samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
+                                     samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
 
 class TripletLossOptimizer(NNClassifier):
 
