@@ -64,15 +64,15 @@ class ReidModel:
 
     """Abstract model class"""
 
-    filepath = None
+    FILENAME = None
     singleton = None
 
     @classmethod
     def get(cls, *args, **kwds):
         """Get singleton."""
         if cls.singleton is None:
-            if cls.filepath is not None:
-                filepath = get_filepath(cls.filepath)
+            if cls.FILENAME is not None:
+                filepath = get_filepath(cls.FILENAME)
                 prefix, ext = os.path.splitext(filepath)
                 if os.path.isfile(filepath):
                     if ext == '.h5':
@@ -107,8 +107,8 @@ class ReidModel:
 
     def save(self):
         """Save singleton after fit."""
-        if self.filepath is not None:
-            filepath = get_filepath(self.filepath)
+        if self.FILENAME is not None:
+            filepath = get_filepath(self.FILENAME)
             ext = os.path.splitext(filepath)[1]
             if ext == '.h5':
                 self.model.save(filepath)
@@ -192,9 +192,10 @@ class LastClassifier(ReidModel):
                 top_5_score((Y_query, proba)),
                )
 
-class FeatureDistance(LastClassifier):
+class Distance(LastClassifier):
 
-    filepath = 'distance.pkl'
+    FILENAME = 'distance.pkl'
+    METRIC = None
 
     N_NEIGHBORS = 5
     metric_names = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS)]
@@ -203,7 +204,7 @@ class FeatureDistance(LastClassifier):
         super().__init__(indexator, model)
         self.y_test = None
         if not self.set_model(model):
-            self.model = neighbors.NearestNeighbors(n_neighbors=self.N_NEIGHBORS)
+            self.model = neighbors.NearestNeighbors(n_neighbors=self.N_NEIGHBORS, metric=self.METRIC, n_jobs=-1)
 
     def fit(self, X_test, y_test):
         X_feature = self.index(X_test)
@@ -226,9 +227,22 @@ class FeatureDistance(LastClassifier):
                 positive.max(axis=1).sum() / y_query.size,
                )
 
+class L2(Distance):
+
+    FILENAME = 'l2.pkl'
+    METRIC = 'l2'
+
+class L1(Distance):
+
+    FILENAME = 'l1.pkl'
+    METRIC = 'l1'
+
+    def index(self, X_test):
+        return self.indexator.predict(X_test) > 0
+
 class KNC(LastClassifier):
 
-    filepath = 'knc.pkl'
+    FILENAME = 'knc.pkl'
 
     def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
@@ -237,7 +251,7 @@ class KNC(LastClassifier):
 
 class SVC(LastClassifier):
 
-    filepath = 'svc.pkl'
+    FILENAME = 'svc.pkl'
 
     def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
@@ -251,7 +265,7 @@ class Simple(NNClassifier):
 
     """Simple model"""
 
-    filepath = 'simple.h5'
+    FILENAME = 'simple.h5'
     head_size = 2
 
     def __init__(self, input_shape=None, count=None, model=None):
@@ -275,7 +289,7 @@ class VGG16(NNClassifier):
 
     """VGG16 model"""
 
-    filepath = 'vgg16.h5'
+    FILENAME = 'vgg16.h5'
     head_size = 1
 
     def __init__(self, input_shape=None, count=None, model=None):
@@ -381,11 +395,13 @@ class ModelType(Enum):
 class ClassifierType(Enum):
     knc = 'knc'
     svc = 'svc'
-    distance = 'distance'
+    l1 = 'l1'
+    l2 = 'l2'
 
 models = {ModelType.simple: Simple,
           ModelType.vgg16: VGG16,
           ClassifierType.knc: KNC,
           ClassifierType.svc: SVC,
-          ClassifierType.distance: FeatureDistance,
+          ClassifierType.l1: L1,
+          ClassifierType.l2: L2,
          }
