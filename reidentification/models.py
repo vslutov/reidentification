@@ -30,6 +30,8 @@ from .i18n import _
 from .triplets import triplet_loss
 
 IMAGE_SHIFT = 0.2
+IMAGE_ROTATION = 20
+IMAGE_ZOOM = 0.2
 
 K.set_image_dim_ordering('th')
 
@@ -149,7 +151,6 @@ class NNClassifier(ReidModel):
 
     def compile(self, lrm=1, loss='categorical_crossentropy'):
         optimizer = Nadam(lr=0.002 * lrm)
-        print(optimizer)
         self.model.compile(loss=loss, optimizer=optimizer,
                            metrics=['accuracy'])
 
@@ -322,23 +323,18 @@ class VGG16(NNClassifier):
             triplet_model = TripletLossOptimizer(base_model=self.get_indexator())
             triplet_model.fit(nb_epoch=nb_epoch, X_train=X_train, y_train=y_train)
         else:
-            datagen = ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
-                                         # height_shift_range=IMAGE_SHIFT,
+            datagen = ImageDataGenerator(width_shift_range=IMAGE_SHIFT,
+                                         height_shift_range=IMAGE_SHIFT,
+                                         rotation_range=IMAGE_ROTATION,
+                                         zoom_range=IMAGE_ZOOM,
                                          vertical_flip=True
                                         )
             datagen.fit(X_train)
 
             Y_train = np_utils.to_categorical(y_train)
 
-            print("First stage: learn top")
-            self.compile(0.02)
-            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                     samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
-
             self.unfreeze()
-            self.compile(0.1)
-
-            print("Second stage: fine-tune")
+            self.compile()
             self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
                                      samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
 
