@@ -23,7 +23,7 @@ def prepare_model(args):
     """Prepare dataset."""
     print(_("Preparing {type}").format(type=args.type))
     dataset = datasets[args.dataset].get()
-    models[args.type].prepare(nb_epoch=args.nb_epoch,
+    models[args.type].prepare(epochs=args.epochs,
                               X_train=dataset['X_train'],
                               y_train=dataset['y_train'],
                               triplets=args.triplets,
@@ -39,7 +39,7 @@ def main():
     evaluate.add_argument('model', choices=ModelType, type=ModelType, help=_("model type"))
     evaluate.add_argument('-c', '--classifier', type=ClassifierType, help=_("classifier for model"), default=ClassifierType.l2)
     evaluate.add_argument('-d', '--dataset', type=DatasetType, help=_("dataset"), default=DatasetType.market1501)
-    evaluate.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
+    evaluate.add_argument('-e', '--epochs', type=int, default=10, help=_("epoch count"))
     evaluate.add_argument('--prepare', dest='prepare', action='store_true')
     evaluate.set_defaults(prepare=False)
     evaluate.add_argument('--triplets', dest='triplets', action='store_true')
@@ -55,7 +55,7 @@ def main():
 
     model = prepare_subparsers.add_parser('model', help=_("prepare model"))
     model.add_argument('type', choices=ModelType, type=ModelType, help=_("model"))
-    model.add_argument('-e', '--nb_epoch', type=int, default=10, help=_("epoch count"))
+    model.add_argument('-e', '--epochs', type=int, default=10, help=_("epoch count"))
     model.add_argument('--triplets', dest='triplets', action='store_true')
     model.set_defaults(triplets=False)
     model.add_argument('-d', '--dataset', choices=DatasetType, type=DatasetType, help=_("dataset"), default=DatasetType.market1501)

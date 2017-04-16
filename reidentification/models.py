@@ -17,7 +17,7 @@ from keras.optimizers import Nadam, SGD
 from keras.utils import np_utils
 from keras import metrics
 from keras import backend as K
-from keras.utils.visualize_util import plot
+from keras.utils import plot_model
 from sklearn import neighbors
 from sklearn.svm import LinearSVC
 from sklearn.externals import joblib
@@ -32,17 +32,18 @@ from .triplets import triplet_loss
 IMAGE_SHIFT = 0.2
 IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
+BATCH_SIZE = 32
 
-K.set_image_dim_ordering('th')
+K.set_image_data_format('channels_last')
 
 def compile_score(func):
     Y_query = K.placeholder(shape=(None, None))
     proba = K.placeholder(shape=(None, None))
     return K.function([Y_query, proba], func(Y_query, proba))
 
-crossentropy_score = compile_score(metrics.categorical_crossentropy)
-accuracy_score = compile_score(metrics.categorical_accuracy)
-top_5_score = compile_score(metrics.top_k_categorical_accuracy)
+# crossentropy_score = compile_score(metrics.categorical_crossentropy)
+# accuracy_score = compile_score(metrics.categorical_accuracy)
+# top_5_score = compile_score(metrics.top_k_categorical_accuracy)
 
 def softmax(decision_function):
     exp = np.exp(decision_function)
@@ -122,20 +123,27 @@ class NNClassifier(ReidModel):
 
     head_size = None
 
-    def fit(self, nb_epoch, X_train, y_train, triplets):
+    @staticmethod
+    def get_datagen():
+        return ImageDataGenerator(width_shift_range=IMAGE_SHIFT,
+                                  height_shift_range=IMAGE_SHIFT,
+                                  rotation_range=IMAGE_ROTATION,
+                                  zoom_range=IMAGE_ZOOM,
+                                  vertical_flip=True,
+                                  data_format='channels_last',
+                                 )
+
+    def fit(self, epochs, X_train, y_train, triplets):
         """Save model after fit."""
         self.model.summary()
 
-        datagen = ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
-                                     # height_shift_range=IMAGE_SHIFT,
-                                     vertical_flip=True
-                                    )
+        datagen = self.get_datagen()
         datagen.fit(X_train)
 
         Y_train = np_utils.to_categorical(y_train)
 
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                 samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+                                 steps_per_epoch=len(X_train), epochs=epochs, verbose=1)
 
     def get_indexator(self):
         model = Model(self.model.input, self.model.layers[-1-self.head_size].output)
@@ -143,9 +151,9 @@ class NNClassifier(ReidModel):
         return model
 
     @classmethod
-    def prepare(cls, nb_epoch, X_train, y_train, triplets):
+    def prepare(cls, epochs, X_train, y_train, triplets):
         model = cls(input_shape=X_train[0, :, :, :].shape, count=y_train.max() + 1)
-        model.fit(X_train=X_train, y_train=y_train, nb_epoch=nb_epoch, triplets=triplets)
+        model.fit(X_train=X_train, y_train=y_train, epochs=epochs, triplets=triplets)
         model.save()
         return model
 
@@ -314,29 +322,27 @@ class VGG16(NNClassifier):
         for layer in self.model.layers:
             layer.trainable = True
 
-    def fit(self, nb_epoch, X_train, y_train, triplets=False):
+    def fit(self, epochs, X_train, y_train, triplets=False):
         """Save model after fit."""
+        datagen = self.get_datagen()
         self.model.summary()
         if triplets:
             self.unfreeze()
             self.compile()
             triplet_model = TripletLossOptimizer(base_model=self.get_indexator())
-            triplet_model.fit(nb_epoch=nb_epoch, X_train=X_train, y_train=y_train)
+            triplet_model.fit(epochs=epochs, X_train=X_train, y_train=y_train)
         else:
-            datagen = ImageDataGenerator(width_shift_range=IMAGE_SHIFT,
-                                         height_shift_range=IMAGE_SHIFT,
-                                         rotation_range=IMAGE_ROTATION,
-                                         zoom_range=IMAGE_ZOOM,
-                                         vertical_flip=True
-                                        )
             datagen.fit(X_train)
-
             Y_train = np_utils.to_categorical(y_train)
+            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
+                                     steps_per_epoch=len(X_train) // BATCH_SIZE, epochs=epochs,
+                                     verbose=1)
 
             self.unfreeze()
             self.compile()
-            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                     samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
+                                     steps_per_epoch=len(X_train) // BATCH_SIZE, epochs=epochs,
+                                     verbose=1)
 
 class TripletLossOptimizer(NNClassifier):
 
@@ -377,9 +383,9 @@ class TripletLossOptimizer(NNClassifier):
             self.model = Model(input_triplets, top)
             self.compile(loss=triplet_loss)
 
-    def fit(self, nb_epoch, X_train, y_train):
+    def fit(self, epochs, X_train, y_train):
         self.model.fit_generator(self.get_triplets(X_train, y_train, batch_size=32),
-                                 samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+                                 samples_per_epoch=len(X_train), epochs=epochs, verbose=1)
 
 class ModelType(Enum):
 

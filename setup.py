@@ -5,7 +5,7 @@
 
 from setuptools import setup, find_packages
 
-VERSION = "0.0.1"
+VERSION = "0.1.1"
 
 setup(name='reidentification',
       version=VERSION,
@@ -17,16 +17,21 @@ setup(name='reidentification',
       platforms=['any'],
       classifiers=["Development Status :: 2 - Pre-Alpha",
                    "Environment :: Console"],
-      install_requires=['numpy==1.12.0',
-                        'h5py==2.6.0',
-                        'pillow==4.0.0',
-                        'scipy==0.18.1',
-                        'scikit-image==0.12.3',
+      install_requires=['numpy==1.12.1',
+
+                        'Keras==2.0.3',
+                        'tensorflow==1.0.1',
+                        'theano==0.9.0',
+
+                        'scipy==0.19.0',
+                        'scikit-image==0.13.0',
                         'scikit-learn==0.18.1',
-                        'tensorflow==0.12.1',
-                        'Keras==1.2.1',
+
                         'tabulate==0.7.7',
                         'pydot-ng==1.0.0',
+                        'pillow==4.1.0',
+
+                        'h5py==2.7.0',
                         'hdf5storage==0.1.14',
                        ],
       packages=find_packages(),

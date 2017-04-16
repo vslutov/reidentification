@@ -16,7 +16,7 @@ class ReidentificationFeatureBuilder(object):
     def __init__(self, model=ModelType.vgg16, dataset=DatasetType.market1501):
         """Init feature bulder."""
         dataset = datasets[dataset].get()
-        model = models[model].get(nb_epoch=10,
+        model = models[model].get(epochs=10,
                                   X_train=dataset['X_train'],
                                   y_train=dataset['y_train'],
                                   triplets=False,

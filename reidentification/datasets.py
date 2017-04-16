@@ -117,7 +117,6 @@ class Market1501(Dataset):
                 with zip_file.open(match.string) as image_file:
                     image = imread(image_file).astype(np.float32) / 255
                     # image = resize(image, (224, 224))
-                    image = image.transpose((2, 0, 1))
                     X.append(image)
 
         if os.path.isfile(MARKET1501_ZIP):
@@ -177,7 +176,7 @@ class CUHK03(Dataset):
             for cam in range(5):
                 for ident in range(labeled[cam, 0].shape[0]):
                     images = list(labeled[cam, 0][ident]) + list(detected[cam, 0][ident])
-                    images = [resize(im, CUHK03_OUTPUT_SIZE).transpose((2, 0, 1))
+                    images = [resize(im, CUHK03_OUTPUT_SIZE)
                               for im in images if len(im) != 0]
                     random.shuffle(images)
                     if random.uniform(0, 1) > 0.5:
