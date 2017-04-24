@@ -313,7 +313,7 @@ class VGG16(NNClassifier):
             top = BatchNormalization()(top)
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
-            self.compile()
+            self.compile(0.002)
 
     def unfreeze(self):
         for layer in self.model.layers:
@@ -336,7 +336,7 @@ class VGG16(NNClassifier):
                                      verbose=1)
 
             self.unfreeze()
-            self.compile()
+            self.compile(0.1)
             self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
                                      steps_per_epoch=len(X_train) // BATCH_SIZE, epochs=epochs,
                                      verbose=1)
