@@ -133,7 +133,7 @@ class NNClassifier(ReidModel):
                                   data_format='channels_last',
                                  )
 
-    def fit(self, epochs, X_train, y_train, triplets):
+    def fit(self, epochs, X_train, y_train, **kwargs):
         """Save model after fit."""
         self.model.summary()
 
@@ -151,9 +151,9 @@ class NNClassifier(ReidModel):
         return model
 
     @classmethod
-    def prepare(cls, epochs, X_train, y_train, triplets):
+    def prepare(cls, X_train, y_train, **kwargs):
         model = cls(input_shape=X_train[0, :, :, :].shape, count=y_train.max() + 1)
-        model.fit(X_train=X_train, y_train=y_train, epochs=epochs, triplets=triplets)
+        model.fit(X_train=X_train, y_train=y_train, **kwargs)
         model.save()
         return model
 
@@ -203,7 +203,6 @@ class LastClassifier(ReidModel):
 
 class Distance(LastClassifier):
 
-    FILENAME = 'distance.pkl'
     METRIC = None
 
     N_NEIGHBORS = 5
@@ -238,12 +237,10 @@ class Distance(LastClassifier):
 
 class L2(Distance):
 
-    FILENAME = 'l2.pkl'
     METRIC = 'l2'
 
 class L1(Distance):
 
-    FILENAME = 'l1.pkl'
     METRIC = 'l1'
 
     def index(self, X_test):
