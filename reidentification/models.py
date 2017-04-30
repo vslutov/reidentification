@@ -5,6 +5,7 @@
 import os.path
 import random
 from functools import wraps
+from itertools import repeat, cycle
 from enum import Enum
 from pprint import pprint
 
@@ -33,6 +34,8 @@ IMAGE_SHIFT = 0.2
 IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
 BATCH_SIZE = 32
+
+HASH_SIZE = 512
 
 K.set_image_data_format('channels_last')
 
@@ -244,7 +247,7 @@ class L1(Distance):
     METRIC = 'l1'
 
     def index(self, X_test):
-        return self.indexator.predict(X_test) > 0
+        return self.indexator.predict(X_test) > 0.5
 
 class KNC(LastClassifier):
 
@@ -291,6 +294,14 @@ class Simple(NNClassifier):
             self.model = Model(inputs, top)
             self.compile()
 
+def quantanization_error(y_true, y_pred):
+    return K.mean(K.abs(K.abs(y_pred - 0.5) - 0.5), axis=-1)
+
+def add_quantanization(gen):
+    for X_train, Y_train in gen:
+        yield [X_train, {'classification_output': Y_train,
+                         'feature_output': np.zeros((Y_train.shape[0], 1))}]
+
 class VGG16(NNClassifier):
 
     """VGG16 model"""
@@ -310,10 +321,28 @@ class VGG16(NNClassifier):
                 layer.trainable = False
             top = base_model.layers[-1].output
             top = GlobalAveragePooling2D()(top)
+
+            # Sigmoid
             top = BatchNormalization()(top)
-            top = Dense(count, activation='softmax')(top)
-            self.model = Model(base_model.input, top)
-            self.compile(0.002)
+            feature_output = top = Dense(HASH_SIZE, activation='sigmoid', name='feature_output')(top)
+
+            # DBE
+            # top = Dense(HASH_SIZE)(top)
+            # top = BatchNormalization()(top)
+            # top = Activation('relu')(top)
+            # top = Activation('tanh', name='feature_output')(top)
+
+            classification_output = top = Dense(count, activation='softmax', name='classification_output')(top)
+            self.model = Model(base_model.input, [classification_output, feature_output])
+            self.compile()
+
+    def compile(self, lrm=1):
+        optimizer = Nadam(lr=0.002 * lrm)
+        self.model.compile(loss={'classification_output': 'categorical_crossentropy',
+                                 'feature_output': quantanization_error},
+                                 optimizer=optimizer, loss_weights={'classification_output': 1.,
+                                                                    'feature_output': .2},
+                           metrics=['accuracy'])
 
     def unfreeze(self):
         for layer in self.model.layers:
@@ -331,13 +360,13 @@ class VGG16(NNClassifier):
         else:
             datagen.fit(X_train)
             Y_train = np_utils.to_categorical(y_train)
-            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
+            self.model.fit_generator(cycle(add_quantanization(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE))),
                                      steps_per_epoch=len(X_train) // BATCH_SIZE, epochs=epochs,
                                      verbose=1)
 
             self.unfreeze()
             self.compile(0.1)
-            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
+            self.model.fit_generator(cycle(add_quantanization(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE))),
                                      steps_per_epoch=len(X_train) // BATCH_SIZE, epochs=epochs,
                                      verbose=1)
 
