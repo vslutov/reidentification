@@ -20,7 +20,6 @@ setup(name='reidentification',
       install_requires=['numpy==1.12.1',
 
                         'Keras==2.0.3',
-                        'tensorflow==1.0.1',
                         'theano==0.9.0',
 
                         'scipy==0.19.0',

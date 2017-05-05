@@ -15,14 +15,15 @@ from keras.applications import VGG16 as BaseVGG16
 from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Dense, Activation, Convolution2D, MaxPooling2D, Flatten, Dropout, GlobalAveragePooling2D, BatchNormalization, Input, TimeDistributed
 from keras.optimizers import Nadam, SGD
-from keras.utils import np_utils
+from keras.utils import np_utils, plot_model
+from keras.callbacks import ReduceLROnPlateau, EarlyStopping
 from keras import metrics
 from keras import backend as K
-from keras.utils import plot_model
-from sklearn import neighbors
+from sklearn import neighbors, utils as sklearn_utils
 from sklearn.svm import LinearSVC
 from sklearn.externals import joblib
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.decomposition import PCA
 from tabulate import tabulate
 from scipy.spatial.distance import squareform, pdist
 
@@ -33,9 +34,9 @@ from .triplets import triplet_loss
 IMAGE_SHIFT = 0.2
 IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
-BATCH_SIZE = 32
+BATCH_SIZE = 256
 
-HASH_SIZE = 512
+HASH_SIZE = 128
 
 K.set_image_data_format('channels_last')
 
@@ -128,11 +129,13 @@ class NNClassifier(ReidModel):
 
     @staticmethod
     def get_datagen():
-        return ImageDataGenerator(width_shift_range=IMAGE_SHIFT,
-                                  height_shift_range=IMAGE_SHIFT,
-                                  rotation_range=IMAGE_ROTATION,
-                                  zoom_range=IMAGE_ZOOM,
-                                  vertical_flip=True,
+        return ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
+                                  # height_shift_range=IMAGE_SHIFT,
+                                  # rotation_range=IMAGE_ROTATION,
+                                  # zoom_range=IMAGE_ZOOM,
+                                  horizontal_flip=True,
+                                  featurewise_std_normalization=True,
+                                  featurewise_center=True,
                                   data_format='channels_last',
                                  )
 
@@ -145,7 +148,7 @@ class NNClassifier(ReidModel):
 
         Y_train = np_utils.to_categorical(y_train)
 
-        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
+        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32), callbacks=self.get_callbacks(),
                                  steps_per_epoch=len(X_train), epochs=epochs, verbose=1)
 
     def get_indexator(self):
@@ -159,6 +162,11 @@ class NNClassifier(ReidModel):
         model.fit(X_train=X_train, y_train=y_train, **kwargs)
         model.save()
         return model
+
+    @staticmethod
+    def get_callbacks():
+        return [ReduceLROnPlateau(patience=10),
+                EarlyStopping(patience=20)]
 
     def compile(self, lrm=1, loss='categorical_crossentropy'):
         optimizer = Nadam(lr=0.002 * lrm)
@@ -249,6 +257,22 @@ class L1(Distance):
     def index(self, X_test):
         return self.indexator.predict(X_test) > 0.5
 
+class PCAL1(Distance):
+
+    METRIC = 'l1'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pca = PCA(n_components=HASH_SIZE)
+
+    def fit(self, X_test, y_test):
+        self.pca.fit(self.indexator.predict(X_test))
+        super().fit(X_test, y_test)
+
+    def index(self, X_test):
+        return self.pca.transform(self.indexator.predict(X_test)) > 0.5
+
+
 class KNC(LastClassifier):
 
     FILENAME = 'knc.pkl'
@@ -324,24 +348,24 @@ class VGG16(NNClassifier):
 
             # Sigmoid
             top = BatchNormalization()(top)
-            feature_output = top = Dense(HASH_SIZE, activation='sigmoid', name='feature_output')(top)
+            # feature_output = top = Dense(HASH_SIZE, activation='sigmoid', name='feature_output')(top)
 
             # DBE
             # top = Dense(HASH_SIZE)(top)
             # top = BatchNormalization()(top)
             # top = Activation('relu')(top)
-            # top = Activation('tanh', name='feature_output')(top)
+            # feature_output = top = Activation('tanh')(top)
 
             classification_output = top = Dense(count, activation='softmax', name='classification_output')(top)
-            self.model = Model(base_model.input, [classification_output, feature_output])
+            self.model = Model(base_model.input, [classification_output])
             self.compile()
 
     def compile(self, lrm=1):
         optimizer = Nadam(lr=0.002 * lrm)
         self.model.compile(loss={'classification_output': 'categorical_crossentropy',
-                                 'feature_output': quantanization_error},
+                                },
                                  optimizer=optimizer, loss_weights={'classification_output': 1.,
-                                                                    'feature_output': .2},
+                                                                   },
                            metrics=['accuracy'])
 
     def unfreeze(self):
@@ -352,22 +376,32 @@ class VGG16(NNClassifier):
         """Save model after fit."""
         datagen = self.get_datagen()
         self.model.summary()
+
+        Y_train = np_utils.to_categorical(y_train)
+        X_train, y_train = sklearn_utils.shuffle(X_train, y_train)
+        steps_per_epoch = int(0.9 * len(X_train) / BATCH_SIZE)
+        X_train, X_val = X_train[:steps_per_epoch * BATCH_SIZE], X_train[steps_per_epoch * BATCH_SIZE:]
+        Y_train, Y_val = Y_train[:steps_per_epoch * BATCH_SIZE], Y_train[steps_per_epoch * BATCH_SIZE:]
+        validation_steps = len(X_val) // BATCH_SIZE
+
         if triplets:
             self.unfreeze()
             self.compile()
             triplet_model = TripletLossOptimizer(base_model=self.get_indexator())
             triplet_model.fit(epochs=epochs, X_train=X_train, y_train=y_train)
         else:
+            self.compile(0.02)
             datagen.fit(X_train)
-            Y_train = np_utils.to_categorical(y_train)
-            self.model.fit_generator(cycle(add_quantanization(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE))),
-                                     steps_per_epoch=len(X_train) // BATCH_SIZE, epochs=epochs,
+            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
+                                     steps_per_epoch=steps_per_epoch, epochs=epochs, callbacks=self.get_callbacks(),
+                                     validation_data=(X_val, Y_val),
                                      verbose=1)
 
             self.unfreeze()
             self.compile(0.1)
-            self.model.fit_generator(cycle(add_quantanization(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE))),
-                                     steps_per_epoch=len(X_train) // BATCH_SIZE, epochs=epochs,
+            self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
+                                     steps_per_epoch=steps_per_epoch, epochs=epochs, callbacks=self.get_callbacks(),
+                                     validation_data=(X_val, Y_val),
                                      verbose=1)
 
 class TripletLossOptimizer(NNClassifier):
@@ -424,6 +458,7 @@ class ClassifierType(Enum):
     knc = 'knc'
     svc = 'svc'
     l1 = 'l1'
+    pca_l1 = 'pca_l1'
     l2 = 'l2'
 
 models = {ModelType.simple: Simple,
@@ -432,4 +467,5 @@ models = {ModelType.simple: Simple,
           ClassifierType.svc: SVC,
           ClassifierType.l1: L1,
           ClassifierType.l2: L2,
+          ClassifierType.pca_l1: PCAL1,
          }
