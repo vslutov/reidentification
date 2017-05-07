@@ -26,17 +26,13 @@ from .datasets import get_filepath, datasets, DatasetType
 from .i18n import _
 
 IMAGE_SHIFT = 0.2
+IMAGE_ROTATION = 20
+IMAGE_ZOOM = 0.2
+BATCH_SIZE = 32
 
-K.set_image_dim_ordering('th')
+HASH_SIZE = 128
 
-def compile_score(func):
-    Y_query = K.placeholder(shape=(None, None))
-    proba = K.placeholder(shape=(None, None))
-    return K.function([Y_query, proba], func(Y_query, proba))
-
-crossentropy_score = compile_score(metrics.categorical_crossentropy)
-accuracy_score = compile_score(metrics.categorical_accuracy)
-top_5_score = compile_score(metrics.top_k_categorical_accuracy)
+K.set_image_data_format('channels_last')
 
 def softmax(decision_function):
     exp = np.exp(decision_function)
@@ -60,27 +56,31 @@ class ReidModel:
 
     """Abstract model class"""
 
-    filepath = None
+    FILENAME = None
     singleton = None
 
     @classmethod
     def get(cls, *args, **kwds):
         """Get singleton."""
-        filepath = get_filepath(cls.filepath)
-        prefix, ext = os.path.splitext(filepath)
 
         if cls.singleton is None:
-            if os.path.isfile(filepath):
-                if ext == '.h5':
-                    model = load_model(filepath)
-                elif ext == '.pkl':
-                    model = joblib.load(filepath)
+            if cls.FILENAME is not None:
+                filepath = get_filepath(cls.FILENAME)
+                prefix, ext = os.path.splitext(filepath)
+                if os.path.isfile(filepath):
+                    if ext == '.h5':
+                        model = load_model(filepath)
+                    elif ext == '.pkl':
+                        model = joblib.load(filepath)
+                    else:
+                        raise NotImplementedError()
+                    cls.singleton = cls(model=model)
                 else:
-                    raise NotImplementedError()
-                cls.singleton = cls(model=model)
-            else:
-                print(_("{filepath} not found... creating").format(filepath=filepath))
+                    print(_("{filepath} not found... creating").format(filepath=filepath))
+
+            if cls.singleton is None: # yet
                 cls.singleton = cls.prepare(*args, **kwds)
+
         return cls.singleton
 
     def set_model(self, model):
@@ -98,21 +98,20 @@ class ReidModel:
     def prepare(self, *args, **kwds):
         raise NotImplementedError()
 
-    def save(self):
-        """Save singleton after fit."""
-        filepath = get_filepath(self.filepath)
-        ext = os.path.splitext(filepath)[1]
-        if ext == '.h5':
-            self.model.save(filepath)
-        elif ext == '.pkl':
-            joblib.dump(self.model, filepath, compress=9)
+        if self.FILENAME is not None:
+            filepath = get_filepath(self.FILENAME)
+            ext = os.path.splitext(filepath)[1]
+            if ext == '.h5':
+                self.model.save(filepath)
+            elif ext == '.pkl':
+                joblib.dump(self.model, filepath, compress=9)
 
 
 class NNClassificator(ReidModel):
 
     head_size = None
 
-    def fit(self, nb_epoch, X_train, y_train):
+    def fit(self, epochs, X_train, y_train):
         """Save model after fit."""
         self.model.summary()
 
@@ -125,7 +124,7 @@ class NNClassificator(ReidModel):
         Y_train = np_utils.to_categorical(y_train)
 
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                 samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+                                 samples_per_epoch=len(X_train), epochs=epochs, verbose=1)
 
     def get_indexator(self):
         model = Model(self.model.input, self.model.layers[-1-self.head_size].output)
@@ -133,9 +132,9 @@ class NNClassificator(ReidModel):
         return model
 
     @classmethod
-    def prepare(cls, nb_epoch, X_train, y_train):
+    def prepare(cls, epochs, X_train, y_train):
         model = cls(input_shape=X_train[0, :, :, :].shape, count=y_train.max() + 1)
-        model.fit(X_train=X_train, y_train=y_train, nb_epoch=nb_epoch)
+        model.fit(X_train=X_train, y_train=y_train, epochs=epochs)
         model.save()
         return model
 
@@ -184,7 +183,7 @@ class LastClassifier(ReidModel):
 
 class FeatureDistance(LastClassifier):
 
-    filepath = 'distance.pkl'
+    FILENAME = 'distance.pkl'
 
     N_NEIGHBORS = 5
     metric_names = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS)]
@@ -218,7 +217,7 @@ class FeatureDistance(LastClassifier):
 
 class KNC(LastClassifier):
 
-    filepath = 'knc.pkl'
+    FILENAME = 'knc.pkl'
 
     def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
@@ -227,7 +226,7 @@ class KNC(LastClassifier):
 
 class SVC(LastClassifier):
 
-    filepath = 'svc.pkl'
+    FILENAME = 'svc.pkl'
 
     def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
@@ -241,7 +240,7 @@ class Simple(NNClassificator):
 
     """Simple model"""
 
-    filepath = 'simple.h5'
+    FILENAME = 'simple.h5'
     head_size = 2
 
     def __init__(self, input_shape=None, count=None, model=None):
@@ -265,7 +264,7 @@ class VGG16(NNClassificator):
 
     """VGG16 model"""
 
-    filepath = 'vgg16.h5'
+    FILENAME = 'vgg16.h5'
     head_size = 1
 
     def __init__(self, input_shape=None, count=None, model=None):
@@ -289,10 +288,11 @@ class VGG16(NNClassificator):
         for layer in self.model.layers:
             layer.trainable = True
 
-    def fit(self, nb_epoch, X_train, y_train):
+    def fit(self, epochs, X_train, y_train):
         """Save model after fit."""
         self.model.summary()
 
+        steps_per_epoch = len(X_train) // BATCH_SIZE
         datagen = ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
                                      # height_shift_range=IMAGE_SHIFT,
                                      vertical_flip=True
@@ -302,15 +302,15 @@ class VGG16(NNClassificator):
         Y_train = np_utils.to_categorical(y_train)
 
         print("First stage: learn top")
-        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                 samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
+                                 steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1)
 
         self.unfreeze()
         self.compile(0.1)
 
         print("Second stage: fine-tune")
-        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                 samples_per_epoch=len(X_train), nb_epoch=nb_epoch, verbose=1)
+        self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
+                                 steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1)
 
 class ModelType(Enum):
 

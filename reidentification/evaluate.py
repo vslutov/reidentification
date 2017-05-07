@@ -15,12 +15,12 @@ def evaluate(args):
     """Evaluate model and print result."""
     dataset = datasets[DatasetType.market1501].get()
     if args.prepare:
-        model = models[args.model].prepare(nb_epoch=args.nb_epoch,
+        model = models[args.model].prepare(epochs=args.epochs,
                                            X_train=dataset['X_train'],
                                            y_train=dataset['y_train'],
                                           )
     else:
-        model = models[args.model].get(nb_epoch=args.nb_epoch,
+        model = models[args.model].get(epochs=args.epochs,
                                        X_train=dataset['X_train'],
                                        y_train=dataset['y_train'],
                                       )
