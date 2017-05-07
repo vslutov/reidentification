@@ -16,7 +16,7 @@ from keras.optimizers import Nadam
 from keras.utils import np_utils
 from keras import metrics
 from keras import backend as K
-from sklearn import neighbors
+from sklearn import neighbors, utils as sklearn_utils
 from sklearn.svm import LinearSVC
 from sklearn.externals import joblib
 from sklearn.calibration import CalibratedClassifierCV
@@ -98,6 +98,8 @@ class ReidModel:
     def prepare(self, *args, **kwds):
         raise NotImplementedError()
 
+    def save(self):
+        """Save singleton after fit."""
         if self.FILENAME is not None:
             filepath = get_filepath(self.FILENAME)
             ext = os.path.splitext(filepath)[1]
@@ -299,18 +301,25 @@ class VGG16(NNClassificator):
                                     )
         datagen.fit(X_train)
 
+        X_train, y_train = sklearn_utils.shuffle(X_train, y_train)
         Y_train = np_utils.to_categorical(y_train)
+        steps_per_epoch = int(0.9 * len(X_train) / BATCH_SIZE)
+        X_train, X_val = X_train[:steps_per_epoch * BATCH_SIZE], X_train[steps_per_epoch * BATCH_SIZE:]
+        Y_train, Y_val = Y_train[:steps_per_epoch * BATCH_SIZE], Y_train[steps_per_epoch * BATCH_SIZE:]
+        validation_steps = len(X_val) // BATCH_SIZE
 
         print("First stage: learn top")
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
-                                 steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1)
+                                 steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1,
+                                 validation_data=(X_val, Y_val))
 
         self.unfreeze()
         self.compile(0.1)
 
         print("Second stage: fine-tune")
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
-                                 steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1)
+                                 steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1,
+                                 validation_data=(X_val, Y_val))
 
 class ModelType(Enum):
 
