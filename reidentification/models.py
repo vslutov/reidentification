@@ -16,6 +16,7 @@ from keras.optimizers import Nadam
 from keras.utils import np_utils
 from keras import metrics
 from keras import backend as K
+from keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 from sklearn import neighbors, utils as sklearn_utils
 from sklearn.svm import LinearSVC
 from sklearn.externals import joblib
@@ -29,7 +30,7 @@ from .i18n import _
 IMAGE_SHIFT = 0.2
 IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
-BATCH_SIZE = 32
+BATCH_SIZE = 512
 
 HASH_SIZE = 32
 
@@ -121,17 +122,21 @@ class NNClassifier(ReidModel):
     def get_datagen():
         return ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
                                   # height_shift_range=IMAGE_SHIFT,
-                                  # rotation_range=IMAGE_ROTATION,
+                                  rotation_range=IMAGE_ROTATION,
                                   # zoom_range=IMAGE_ZOOM,
                                   horizontal_flip=True,
                                   # vertical_flip=True,
                                   data_format='channels_last',
                                  )
 
-    @staticmethod
-    def get_callbacks():
-        return [ReduceLROnPlateau(patience=10),
-                EarlyStopping(patience=20)]
+    @classmethod
+    def get_callbacks(cls):
+        result = [ReduceLROnPlateau(patience=3),
+                  EarlyStopping(patience=7)]
+        if cls.FILENAME is not None:
+            result.append(ModelCheckpoint(get_filepath(cls.FILENAME + '.{epoch:02d}-{val_loss:.2f}.hdf5'), save_best_only=True))
+
+        return result
 
     def fit(self, epochs, X_train, y_train):
         """Save model after fit."""
@@ -143,7 +148,8 @@ class NNClassifier(ReidModel):
         Y_train = np_utils.to_categorical(y_train)
 
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=32),
-                                 samples_per_epoch=len(X_train), epochs=epochs, verbose=1)
+                                 samples_per_epoch=len(X_train), epochs=epochs,
+                                 callbacks=self.get_callbacks(), verbose=1)
 
     def get_indexator(self):
         model = Model(self.model.input, self.model.layers[-1-self.head_size].output)
@@ -157,7 +163,7 @@ class NNClassifier(ReidModel):
         model.save()
         return model
 
-    def compile(self, lrm=0.002):
+    def compile(self, lrm=1):
         self.model.compile(loss='categorical_crossentropy', optimizer=Nadam(lr=0.002 * lrm),
                            metrics=['accuracy'])
 
@@ -355,10 +361,12 @@ class VGG16(NNClassifier):
         Y_train, Y_val = Y_train[:steps_per_epoch * BATCH_SIZE], Y_train[steps_per_epoch * BATCH_SIZE:]
         validation_steps = len(X_val) // BATCH_SIZE
 
+        self.compile(0.02)
         print("First stage: learn top")
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
                                  steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1,
-                                 validation_data=(X_val, Y_val))
+                                 validation_data=(X_val, Y_val), callbacks=self.get_callbacks())
+        self.save()
 
         self.unfreeze()
         self.compile(0.1)
@@ -366,7 +374,7 @@ class VGG16(NNClassifier):
         print("Second stage: fine-tune")
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
                                  steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1,
-                                 validation_data=(X_val, Y_val))
+                                 validation_data=(X_val, Y_val), callbacks=self.get_callbacks())
 
 class ModelType(Enum):
 
