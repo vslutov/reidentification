@@ -109,6 +109,9 @@ class ReidModel:
             elif ext == '.pkl':
                 joblib.dump(self.model, filepath, compress=9)
 
+def image_normalization(X):
+    X = X - np.stack([X.mean(0)] * X.shape[0]) # featurewise_center
+    return X / np.stack([np.sqrt((X ** 2).mean(0))] * X.shape[0]) # featurewise_std_normalization
 
 class NNClassifier(ReidModel):
 
@@ -122,10 +125,13 @@ class NNClassifier(ReidModel):
                                   # zoom_range=IMAGE_ZOOM,
                                   horizontal_flip=True,
                                   # vertical_flip=True,
-                                  # featurewise_std_normalization=True,
-                                  # featurewise_center=True,
                                   data_format='channels_last',
                                  )
+
+    @staticmethod
+    def get_callbacks():
+        return [ReduceLROnPlateau(patience=10),
+                EarlyStopping(patience=20)]
 
     def fit(self, epochs, X_train, y_train):
         """Save model after fit."""
@@ -163,6 +169,7 @@ class LastClassifier(ReidModel):
         self.indexator = indexator
 
     def index(self, X_test):
+        X_test = image_normalization(X_test)
         return self.indexator.predict(X_test)
 
     def fit(self, X_test, y_test):
@@ -237,6 +244,7 @@ class L1(Distance):
     METRIC = 'l1'
 
     def index(self, X_test):
+        X_test = image_normalization(X_test)
         return self.indexator.predict(X_test) > 0.5
 
 class PCAL1(Distance):
@@ -252,6 +260,7 @@ class PCAL1(Distance):
         super().fit(X_test, y_test)
 
     def index(self, X_test):
+        X_test = image_normalization(X_test)
         return self.pca.transform(self.indexator.predict(X_test)) > 0.5
 
 
@@ -333,14 +342,14 @@ class VGG16(NNClassifier):
         self.model.summary()
 
         steps_per_epoch = len(X_train) // BATCH_SIZE
-        datagen = ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
-                                     # height_shift_range=IMAGE_SHIFT,
-                                     vertical_flip=True
-                                    )
+        datagen = self.get_datagen()
         datagen.fit(X_train)
 
         X_train, y_train = sklearn_utils.shuffle(X_train, y_train)
+
+        X_train = image_normalization(X_train)
         Y_train = np_utils.to_categorical(y_train)
+
         steps_per_epoch = int(0.9 * len(X_train) / BATCH_SIZE)
         X_train, X_val = X_train[:steps_per_epoch * BATCH_SIZE], X_train[steps_per_epoch * BATCH_SIZE:]
         Y_train, Y_val = Y_train[:steps_per_epoch * BATCH_SIZE], Y_train[steps_per_epoch * BATCH_SIZE:]
