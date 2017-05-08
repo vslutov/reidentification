@@ -110,7 +110,7 @@ class ReidModel:
             elif ext == '.pkl':
                 joblib.dump(self.model, filepath, compress=9)
 
-def image_normalization(X):
+def normalize_images(X):
     X = X - np.stack([X.mean(0)] * X.shape[0]) # featurewise_center
     return X / np.stack([np.sqrt((X ** 2).mean(0))] * X.shape[0]) # featurewise_std_normalization
 
@@ -175,7 +175,7 @@ class LastClassifier(ReidModel):
         self.indexator = indexator
 
     def index(self, X_test):
-        X_test = image_normalization(X_test)
+        X_test = normalize_images(X_test)
         return self.indexator.predict(X_test)
 
     def fit(self, X_test, y_test):
@@ -250,7 +250,7 @@ class L1(Distance):
     METRIC = 'l1'
 
     def index(self, X_test):
-        X_test = image_normalization(X_test)
+        X_test = normalize_images(X_test)
         return self.indexator.predict(X_test) > 0.5
 
 class PCAL1(Distance):
@@ -262,11 +262,12 @@ class PCAL1(Distance):
         self.pca = PCA(n_components=HASH_SIZE)
 
     def fit(self, X_test, y_test):
+        X_test = normalize_images(X_test)
         self.pca.fit(self.indexator.predict(X_test))
         super().fit(X_test, y_test)
 
     def index(self, X_test):
-        X_test = image_normalization(X_test)
+        X_test = normalize_images(X_test)
         return self.pca.transform(self.indexator.predict(X_test)) > 0.5
 
 
@@ -325,16 +326,25 @@ class VGG16(NNClassifier):
     def __init__(self, input_shape=None, count=None, model=None):
         """Prepare vgg16 model."""
         SLICE_LAYERS = 4
+        baseline_filepath = get_filepath('baseline_vgg.h5')
 
         if not self.set_model(model):
-            base_model = BaseVGG16(include_top=False, input_shape=input_shape)
-            for i in range(SLICE_LAYERS):
-                pop_layer(base_model)
-            for layer in base_model.layers:
-                layer.trainable = False
-            top = base_model.layers[-1].output
-            top = GlobalAveragePooling2D()(top)
-            top = BatchNormalization()(top)
+            if os.isfile(baseline_filepath):
+                print('Baseline found!')
+                base_model = load_model(baseline_filepath)
+                top = base_model.layers[-1].output
+                pop_layer(base_model) # fully connected layer
+            else:
+                print('Baseline not found!')
+                base_model = BaseVGG16(include_top=False, input_shape=input_shape)
+                for i in range(SLICE_LAYERS):
+                    pop_layer(base_model)
+                for layer in base_model.layers:
+                    layer.trainable = False
+                top = base_model.layers[-1].output
+                top = GlobalAveragePooling2D()(top)
+                top = BatchNormalization()(top)
+
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
             self.compile()
@@ -353,7 +363,7 @@ class VGG16(NNClassifier):
 
         X_train, y_train = sklearn_utils.shuffle(X_train, y_train)
 
-        X_train = image_normalization(X_train)
+        X_train = normalize_images(X_train)
         Y_train = np_utils.to_categorical(y_train)
 
         steps_per_epoch = int(0.9 * len(X_train) / BATCH_SIZE)
@@ -366,7 +376,6 @@ class VGG16(NNClassifier):
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
                                  steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1,
                                  validation_data=(X_val, Y_val), callbacks=self.get_callbacks())
-        self.save()
 
         self.unfreeze()
         self.compile(0.1)
