@@ -20,6 +20,7 @@ from sklearn import neighbors, utils as sklearn_utils
 from sklearn.svm import LinearSVC
 from sklearn.externals import joblib
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.decomposition import PCA
 from tabulate import tabulate
 
 from .datasets import get_filepath, datasets, DatasetType
@@ -30,7 +31,7 @@ IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
 BATCH_SIZE = 32
 
-HASH_SIZE = 128
+HASH_SIZE = 32
 
 K.set_image_data_format('channels_last')
 
@@ -109,18 +110,28 @@ class ReidModel:
                 joblib.dump(self.model, filepath, compress=9)
 
 
-class NNClassificator(ReidModel):
+class NNClassifier(ReidModel):
 
     head_size = None
+
+    @staticmethod
+    def get_datagen():
+        return ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
+                                  # height_shift_range=IMAGE_SHIFT,
+                                  # rotation_range=IMAGE_ROTATION,
+                                  # zoom_range=IMAGE_ZOOM,
+                                  horizontal_flip=True,
+                                  # vertical_flip=True,
+                                  # featurewise_std_normalization=True,
+                                  # featurewise_center=True,
+                                  data_format='channels_last',
+                                 )
 
     def fit(self, epochs, X_train, y_train):
         """Save model after fit."""
         self.model.summary()
 
-        datagen = ImageDataGenerator(# width_shift_range=IMAGE_SHIFT,
-                                     # height_shift_range=IMAGE_SHIFT,
-                                     vertical_flip=True
-                                    )
+        datagen = self.get_datagen()
         datagen.fit(X_train)
 
         Y_train = np_utils.to_categorical(y_train)
@@ -183,9 +194,9 @@ class LastClassifier(ReidModel):
                 top_5_score((Y_query, proba)),
                )
 
-class FeatureDistance(LastClassifier):
+class Distance(LastClassifier):
 
-    FILENAME = 'distance.pkl'
+    METRIC = None
 
     N_NEIGHBORS = 5
     metric_names = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS)]
@@ -194,7 +205,7 @@ class FeatureDistance(LastClassifier):
         super().__init__(indexator, model)
         self.y_test = None
         if not self.set_model(model):
-            self.model = neighbors.NearestNeighbors(n_neighbors=self.N_NEIGHBORS)
+            self.model = neighbors.NearestNeighbors(n_neighbors=self.N_NEIGHBORS, metric=self.METRIC, n_jobs=-1)
 
     def fit(self, X_test, y_test):
         X_feature = self.index(X_test)
@@ -217,6 +228,33 @@ class FeatureDistance(LastClassifier):
                 positive.max(axis=1).sum() / y_query.size,
                )
 
+class L2(Distance):
+
+    METRIC = 'l2'
+
+class L1(Distance):
+
+    METRIC = 'l1'
+
+    def index(self, X_test):
+        return self.indexator.predict(X_test) > 0.5
+
+class PCAL1(Distance):
+
+    METRIC = 'l1'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pca = PCA(n_components=HASH_SIZE)
+
+    def fit(self, X_test, y_test):
+        self.pca.fit(self.indexator.predict(X_test))
+        super().fit(X_test, y_test)
+
+    def index(self, X_test):
+        return self.pca.transform(self.indexator.predict(X_test)) > 0.5
+
+
 class KNC(LastClassifier):
 
     FILENAME = 'knc.pkl'
@@ -238,7 +276,7 @@ class SVC(LastClassifier):
     def _predict_proba(self, X_feature):
         return softmax(self.model.decision_function(X_feature))
 
-class Simple(NNClassificator):
+class Simple(NNClassifier):
 
     """Simple model"""
 
@@ -262,7 +300,7 @@ class Simple(NNClassificator):
             self.model = Model(inputs, top)
             self.compile()
 
-class VGG16(NNClassificator):
+class VGG16(NNClassifier):
 
     """VGG16 model"""
 
@@ -331,11 +369,15 @@ class ModelType(Enum):
 class ClassifierType(Enum):
     knc = 'knc'
     svc = 'svc'
-    distance = 'distance'
+    l1 = 'l1'
+    l2 = 'l2'
+    pca_l1 = 'pca_l1'
 
 models = {ModelType.simple: Simple,
           ModelType.vgg16: VGG16,
           ClassifierType.knc: KNC,
           ClassifierType.svc: SVC,
-          ClassifierType.distance: FeatureDistance,
+          ClassifierType.l1: L1,
+          ClassifierType.l2: L2,
+          ClassifierType.pca_l1: PCAL1,
          }
