@@ -131,8 +131,8 @@ class NNClassifier(ReidModel):
 
     @classmethod
     def get_callbacks(cls):
-        result = [ReduceLROnPlateau(patience=3),
-                  EarlyStopping(patience=7)]
+        result = [ReduceLROnPlateau(patience=10),
+                  EarlyStopping(patience=15)]
         if cls.FILENAME is not None:
             result.append(ModelCheckpoint(get_filepath(cls.FILENAME + '.{epoch:02d}-{val_loss:.2f}.hdf5'), save_best_only=True))
 
@@ -268,7 +268,7 @@ class PCAL1(Distance):
 
     def index(self, X_test):
         X_test = normalize_images(X_test)
-        return self.pca.transform(self.indexator.predict(X_test)) > 0.5
+        return self.pca.transform(self.indexator.predict(X_test)) > 0
 
 
 class KNC(LastClassifier):
@@ -326,14 +326,16 @@ class VGG16(NNClassifier):
     def __init__(self, input_shape=None, count=None, model=None):
         """Prepare vgg16 model."""
         SLICE_LAYERS = 4
-        baseline_filepath = get_filepath('baseline_vgg.h5')
+        baseline_filepath = get_filepath('baseline_vgg16.h5')
 
         if not self.set_model(model):
-            if os.isfile(baseline_filepath):
+            if os.path.isfile(baseline_filepath):
                 print('Baseline found!')
                 base_model = load_model(baseline_filepath)
-                top = base_model.layers[-1].output
                 pop_layer(base_model) # fully connected layer
+                top = base_model.layers[-1].output
+                for layer in base_model.layers:
+                    layer.trainable = False
             else:
                 print('Baseline not found!')
                 base_model = BaseVGG16(include_top=False, input_shape=input_shape)
@@ -345,6 +347,7 @@ class VGG16(NNClassifier):
                 top = GlobalAveragePooling2D()(top)
                 top = BatchNormalization()(top)
 
+            top = Dense(HASH_SIZE, activation='sigmoid')(top)
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
             self.compile()
@@ -371,7 +374,7 @@ class VGG16(NNClassifier):
         Y_train, Y_val = Y_train[:steps_per_epoch * BATCH_SIZE], Y_train[steps_per_epoch * BATCH_SIZE:]
         validation_steps = len(X_val) // BATCH_SIZE
 
-        self.compile(0.02)
+        self.compile()
         print("First stage: learn top")
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
                                  steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1,
