@@ -41,6 +41,8 @@ def main():
     evaluate.add_argument('-e', '--epochs', type=int, default=10, help=_("epoch count"))
     evaluate.add_argument('--prepare', dest='prepare', action='store_true')
     evaluate.set_defaults(prepare=False)
+    evaluate.add_argument('--pca', dest='pca', action='store_true')
+    evaluate.set_defaults(pca=False)
     evaluate.set_defaults(func=run_evaluate)
 
     prepare = subparsers.add_parser('prepare', help=_("prepare dataset or model"))
