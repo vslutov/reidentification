@@ -7,6 +7,7 @@
 from tabulate import tabulate
 import numpy as np
 from sklearn.decomposition import PCA
+from sklearn.ensemble import AdaBoostClassifier
 from sklearn import neighbors
 
 from .models import models, ModelType, normalize_images
@@ -16,6 +17,8 @@ def evaluate(args):
     """Evaluate model, pca or adaboost."""
     if args.pca:
         return evaluate_pca(args)
+    elif args.adaboost:
+        return evaluate_adaboost(args)
     else:
         return evaluate_normal(args)
 
@@ -46,12 +49,47 @@ def evaluate_normal(args):
     print(tabulate([classifier.evaluate(dataset['X_query'], dataset['y_query'])],
                    headers=classifier.metric_names))
 
+def evaluate_adaboost(args):
+    """Evaluate pca and print result."""
+    dataset, model = get_dataset_and_model(args)
+
+    N_NEIGHBORS = 5
+
+    indexator = model.get_indexator()
+    X_test = indexator.predict(normalize_images(dataset['X_test']))
+    X_query = indexator.predict(normalize_images(dataset['X_query']))
+    y_test=dataset['y_test']
+    y_query=dataset['y_query']
+
+    X_train = indexator.predict(normalize_images(dataset['X_train']))
+    y_train=dataset['y_train']
+    clf = AdaBoostClassifier(n_estimators=512)
+    clf.fit(X_train, y_train)
+    permutation = np.argsort(clf.feature_importances_)[::-1]
+    _X_base = (pca.transform(X_test) > 0)[permutation]
+    _X_find = (pca.transform(X_query) > 0)[permutation]
+
+    for i in range(16, 513, 4):
+        X_base = _X_base[:, :i]
+        X_find = _X_find[:, :i]
+        classifier = neighbors.NearestNeighbors(n_neighbors=N_NEIGHBORS, metric='l1', n_jobs=-1)
+        classifier.fit(X_base)
+        our_neighbours = classifier.kneighbors(X_find, return_distance=False)
+        y_pred = y_test[our_neighbours]
+        y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * N_NEIGHBORS)
+        positive = y_pred == y_true
+        precisions = (positive[:, 1].sum() / y_query.size,
+                      positive.max(axis=1).sum() / y_query.size,
+                     )
+        with open('log.txt', 'a') as logfile:
+            print(i, precisions, file=logfile)
+        print(i, precisions)
+
 def evaluate_pca(args):
     """Evaluate pca and print result."""
     dataset, model = get_dataset_and_model(args)
 
     N_NEIGHBORS = 5
-    metric_names = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS)]
 
     indexator = model.get_indexator()
     X_test = indexator.predict(normalize_images(dataset['X_test']))
