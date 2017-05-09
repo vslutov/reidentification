@@ -43,8 +43,8 @@ def main():
     evaluate.set_defaults(prepare=False)
     evaluate.add_argument('--pca', dest='pca', action='store_true')
     evaluate.set_defaults(pca=False)
-    evaluate.add_argument('--adaboost', dest='adaboost', action='store_true')
-    evaluate.set_defaults(adaboost=False)
+    evaluate.add_argument('--randomforest', dest='randomforest', action='store_true')
+    evaluate.set_defaults(randomforest=False)
     evaluate.set_defaults(func=run_evaluate)
 
     prepare = subparsers.add_parser('prepare', help=_("prepare dataset or model"))

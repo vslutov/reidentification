@@ -33,7 +33,7 @@ IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
 BATCH_SIZE = 128
 
-HASH_SIZE = 128
+HASH_SIZE = 512
 
 K.set_image_data_format('channels_last')
 
@@ -264,7 +264,7 @@ class L1(Distance):
 
     def index(self, X_test):
         X_test = normalize_images(X_test)
-        return self.indexator.predict(X_test) > 0.5
+        return self.indexator.predict(X_test) > 0
 
 class PCAL1(Distance):
 
@@ -360,7 +360,15 @@ class VGG16(NNClassifier):
                 top = GlobalAveragePooling2D()(top)
                 top = BatchNormalization()(top)
 
-            top = Dense(HASH_SIZE, activation='sigmoid')(top)
+            # Sigmoid
+            # top = Dense(HASH_SIZE, activation='sigmoid')(top)
+
+            # DBE
+            top = Dense(HASH_SIZE)(top)
+            top = BatchNormalization(name='other_batch_normalization')(top)
+            top = Activation('relu')(top)
+            feature_output = top = Activation('tanh')(top)
+
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
             self.compile()
@@ -390,15 +398,16 @@ class VGG16(NNClassifier):
         self.compile()
         print("First stage: learn top")
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
-                                 steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1,
+                                 steps_per_epoch=steps_per_epoch, epochs=200, verbose=1,
                                  validation_data=(X_val, Y_val), callbacks=self.get_callbacks())
+        self.save()
 
         self.unfreeze()
         self.compile(0.1)
 
         print("Second stage: fine-tune")
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
-                                 steps_per_epoch=steps_per_epoch, epochs=epochs, verbose=1,
+                                 steps_per_epoch=steps_per_epoch, epochs=50, verbose=1,
                                  validation_data=(X_val, Y_val), callbacks=self.get_callbacks())
 
 class ModelType(Enum):

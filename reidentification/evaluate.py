@@ -7,18 +7,18 @@
 from tabulate import tabulate
 import numpy as np
 from sklearn.decomposition import PCA
-from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn import neighbors
 
 from .models import models, ModelType, normalize_images
 from .datasets import datasets, DatasetType
 
 def evaluate(args):
-    """Evaluate model, pca or adaboost."""
+    """Evaluate model, pca or randomforest."""
     if args.pca:
         return evaluate_pca(args)
-    elif args.adaboost:
-        return evaluate_adaboost(args)
+    elif args.randomforest:
+        return evaluate_randomforest(args)
     else:
         return evaluate_normal(args)
 
@@ -39,19 +39,19 @@ def get_dataset_and_model(args):
                                                  X_test=dataset['X_test'],
                                                  y_test=dataset['y_test'],
                                                 )
-    return dataset, model
+    return dataset, model, classifier
 
 def evaluate_normal(args):
     """Evaluate model and print result."""
     np.random.seed(123)
-    dataset, model = get_dataset_and_model(args)
+    dataset, model, classifier = get_dataset_and_model(args)
 
     print(tabulate([classifier.evaluate(dataset['X_query'], dataset['y_query'])],
                    headers=classifier.metric_names))
 
-def evaluate_adaboost(args):
+def evaluate_randomforest(args):
     """Evaluate pca and print result."""
-    dataset, model = get_dataset_and_model(args)
+    dataset, model, classifier = get_dataset_and_model(args)
 
     N_NEIGHBORS = 5
 
@@ -63,11 +63,11 @@ def evaluate_adaboost(args):
 
     X_train = indexator.predict(normalize_images(dataset['X_train']))
     y_train=dataset['y_train']
-    clf = AdaBoostClassifier(n_estimators=512)
+    clf = RandomForestClassifier()
     clf.fit(X_train, y_train)
     permutation = np.argsort(clf.feature_importances_)[::-1]
-    _X_base = (pca.transform(X_test) > 0)[permutation]
-    _X_find = (pca.transform(X_query) > 0)[permutation]
+    _X_base = (X_test > 0)[permutation]
+    _X_find = (X_query > 0)[permutation]
 
     for i in range(16, 513, 4):
         X_base = _X_base[:, :i]
@@ -87,7 +87,7 @@ def evaluate_adaboost(args):
 
 def evaluate_pca(args):
     """Evaluate pca and print result."""
-    dataset, model = get_dataset_and_model(args)
+    dataset, model, classifier = get_dataset_and_model(args)
 
     N_NEIGHBORS = 5
 
