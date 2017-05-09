@@ -23,6 +23,7 @@ from sklearn.externals import joblib
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.decomposition import PCA
 from tabulate import tabulate
+from ml_metrics.average_precision import mapk
 
 from .datasets import get_filepath, datasets, DatasetType
 from .i18n import _
@@ -32,7 +33,7 @@ IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
 BATCH_SIZE = 128
 
-HASH_SIZE = 32
+HASH_SIZE = 128
 
 K.set_image_data_format('channels_last')
 
@@ -212,13 +213,14 @@ class Distance(LastClassifier):
     METRIC = None
 
     N_NEIGHBORS = 5
-    metric_names = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS)]
+    MAP_NEIGHBORS = 100
+    metric_names = ['rank-1', 'rank-{n_neighbors}'.format(n_neighbors=N_NEIGHBORS), 'mAP']
 
     def __init__(self, indexator, model=None):
         super().__init__(indexator, model)
         self.y_test = None
         if not self.set_model(model):
-            self.model = neighbors.NearestNeighbors(n_neighbors=self.N_NEIGHBORS, metric=self.METRIC, n_jobs=-1)
+            self.model = neighbors.NearestNeighbors(n_neighbors=self.MAP_NEIGHBORS, metric=self.METRIC, n_jobs=-1)
 
     def fit(self, X_test, y_test):
         X_feature = self.index(X_test)
@@ -227,19 +229,30 @@ class Distance(LastClassifier):
 
     def predict(self, X_query):
         X_feature = self.index(X_query)
-        neighbors = self.model.kneighbors(X_feature, n_neighbors=1, return_distance=False).reshape((-1,))
-        return self.y_test(neighbors)
+        our_neighbors = self.model.kneighbors(X_feature, n_neighbors=1, return_distance=False).reshape((-1,))
+        return self.y_test(our_neighbors)
 
     def evaluate(self, X_query, y_query):
         X_feature = self.index(X_query)
-        neighbors = self.model.kneighbors(X_feature, return_distance=False)
+        our_neighbors = self.model.kneighbors(X_feature, n_neighbors=self.N_NEIGHBORS, return_distance=False)
 
-        y_pred = self.y_test[neighbors]
+        y_pred = self.y_test[our_neighbors]
         y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * self.N_NEIGHBORS)
         positive = y_pred == y_true
-        return (positive[:, 1].sum() / y_query.size,
-                positive.max(axis=1).sum() / y_query.size,
-               )
+        result = [positive[:, 1].sum() / y_query.size,
+                  positive.max(axis=1).sum() / y_query.size,
+                 ]
+
+        print("Calc mAP")
+        true_neighbours = [list((self.y_test == q).nonzero()[0]) for q in y_query]
+
+        print("Calc nn")
+        our_neighbors = self.model.kneighbors(X_feature, n_neighbors=self.MAP_NEIGHBORS, return_distance=False)
+
+        print("Run external mapk")
+        result.append(mapk(true_neighbours, our_neighbors, len(our_neighbors[0])))
+        return result
+
 
 class L2(Distance):
 

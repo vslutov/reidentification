@@ -33,6 +33,7 @@ setup(name='reidentification',
 
                         'h5py>=2.7,<3',
                         'hdf5storage>=0.1',
+                        'ml_metrics>=0.1',
                        ],
       packages=find_packages(),
       include_package_data=True,
