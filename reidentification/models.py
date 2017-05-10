@@ -33,7 +33,7 @@ IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
 BATCH_SIZE = 128
 
-HASH_SIZE = 512
+HASH_SIZE = 64
 
 K.set_image_data_format('channels_last')
 

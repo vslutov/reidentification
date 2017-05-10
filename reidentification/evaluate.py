@@ -60,14 +60,15 @@ def evaluate_randomforest(args):
     X_query = indexator.predict(normalize_images(dataset['X_query']))
     y_test=dataset['y_test']
     y_query=dataset['y_query']
+    y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * N_NEIGHBORS)
 
     X_train = indexator.predict(normalize_images(dataset['X_train']))
     y_train=dataset['y_train']
     clf = RandomForestClassifier()
     clf.fit(X_train, y_train)
     permutation = np.argsort(clf.feature_importances_)[::-1]
-    _X_base = (X_test > 0)[permutation]
-    _X_find = (X_query > 0)[permutation]
+    _X_base = (X_test > 0)[:, permutation]
+    _X_find = (X_query > 0)[:, permutation]
 
     for i in range(16, 513, 4):
         X_base = _X_base[:, :i]
@@ -76,7 +77,6 @@ def evaluate_randomforest(args):
         classifier.fit(X_base)
         our_neighbours = classifier.kneighbors(X_find, return_distance=False)
         y_pred = y_test[our_neighbours]
-        y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * N_NEIGHBORS)
         positive = y_pred == y_true
         precisions = (positive[:, 1].sum() / y_query.size,
                       positive.max(axis=1).sum() / y_query.size,
@@ -96,6 +96,7 @@ def evaluate_pca(args):
     X_query = indexator.predict(normalize_images(dataset['X_query']))
     y_test=dataset['y_test']
     y_query=dataset['y_query']
+    y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * N_NEIGHBORS)
 
     X_train = indexator.predict(normalize_images(dataset['X_train']))
     pca = PCA(n_components=512)
@@ -110,7 +111,6 @@ def evaluate_pca(args):
         classifier.fit(X_base)
         our_neighbours = classifier.kneighbors(X_find, return_distance=False)
         y_pred = y_test[our_neighbours]
-        y_true = np.hstack([np.array(y_query).reshape((-1, 1))] * N_NEIGHBORS)
         positive = y_pred == y_true
         precisions = (positive[:, 1].sum() / y_query.size,
                       positive.max(axis=1).sum() / y_query.size,
