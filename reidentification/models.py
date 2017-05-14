@@ -33,7 +33,7 @@ IMAGE_ROTATION = 20
 IMAGE_ZOOM = 0.2
 BATCH_SIZE = 128
 
-HASH_SIZE = 64
+HASH_SIZE = 512
 
 K.set_image_data_format('channels_last')
 
@@ -364,10 +364,10 @@ class VGG16(NNClassifier):
             # top = Dense(HASH_SIZE, activation='sigmoid')(top)
 
             # DBE
-            top = Dense(HASH_SIZE)(top)
-            top = BatchNormalization(name='other_batch_normalization')(top)
-            top = Activation('relu')(top)
-            feature_output = top = Activation('tanh')(top)
+            # top = Dense(HASH_SIZE)(top)
+            # top = BatchNormalization(name='other_batch_normalization')(top)
+            # top = Activation('relu')(top)
+            # feature_output = top = Activation('tanh')(top)
 
             top = Dense(count, activation='softmax')(top)
             self.model = Model(base_model.input, top)
@@ -395,12 +395,13 @@ class VGG16(NNClassifier):
         Y_train, Y_val = Y_train[:steps_per_epoch * BATCH_SIZE], Y_train[steps_per_epoch * BATCH_SIZE:]
         validation_steps = len(X_val) // BATCH_SIZE
 
-        self.compile()
+        self.compile(0.02)
         print("First stage: learn top")
         self.model.fit_generator(datagen.flow(X_train, Y_train, batch_size=BATCH_SIZE),
                                  steps_per_epoch=steps_per_epoch, epochs=200, verbose=1,
                                  validation_data=(X_val, Y_val), callbacks=self.get_callbacks())
         self.save()
+        # self.model = self.get().model
 
         self.unfreeze()
         self.compile(0.1)
