@@ -12,7 +12,7 @@ from enum import Enum
 from .i18n import _
 from .evaluate import evaluate as run_evaluate
 from .datasets import datasets, DatasetType
-from .models import models, ModelType, ClassifierType
+from .models import models, ModelType, ClassifierType, QueryType
 
 def prepare_dataset(args):
     """Prepare model."""
@@ -45,6 +45,7 @@ def main():
     evaluate.set_defaults(pca=False)
     evaluate.add_argument('--randomforest', dest='randomforest', action='store_true')
     evaluate.set_defaults(randomforest=False)
+    evaluate.add_argument('-q', '--query', type=QueryType, default=QueryType.single, help="query type: single or multiple image")
     evaluate.set_defaults(func=run_evaluate)
 
     prepare = subparsers.add_parser('prepare', help=_("prepare dataset or model"))

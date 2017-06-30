@@ -37,6 +37,10 @@ HASH_SIZE = 512
 
 K.set_image_data_format('channels_last')
 
+class QueryType(Enum):
+    single = "single"
+    multiple = "multiple"
+
 def softmax(decision_function):
     exp = np.exp(decision_function)
     return exp / exp.sum(axis=1).reshape((-1, 1))
@@ -232,8 +236,14 @@ class Distance(LastClassifier):
         our_neighbors = self.model.kneighbors(X_feature, n_neighbors=1, return_distance=False).reshape((-1,))
         return self.y_test(our_neighbors)
 
-    def evaluate(self, X_query, y_query):
+    def evaluate(self, X_query, y_query, query):
         X_feature = self.index(X_query)
+
+        if query is QueryType.multiple:
+            keys = np.array(sorted(set(y_query)))
+            X_feature = np.array([X_feature[y_query == key].mean(axis=0) for key in keys])
+            y_query = keys
+
         our_neighbors = self.model.kneighbors(X_feature, n_neighbors=self.N_NEIGHBORS, return_distance=False)
 
         y_pred = self.y_test[our_neighbors]

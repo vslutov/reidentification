@@ -4,13 +4,15 @@
 """Evaluate model and print result.
 """
 
+from enum import Enum
+
 from tabulate import tabulate
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import neighbors
 
-from .models import models, ModelType, normalize_images
+from .models import models, ModelType, normalize_images, QueryType
 from .datasets import datasets, DatasetType
 
 def evaluate(args):
@@ -46,7 +48,7 @@ def evaluate_normal(args):
     np.random.seed(123)
     dataset, model, classifier = get_dataset_and_model(args)
 
-    print(tabulate([classifier.evaluate(dataset['X_query'], dataset['y_query'])],
+    print(tabulate([classifier.evaluate(dataset['X_query'], dataset['y_query'], query=args.query)],
                    headers=classifier.metric_names))
 
 def evaluate_randomforest(args):
