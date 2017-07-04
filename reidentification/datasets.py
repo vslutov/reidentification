@@ -10,6 +10,7 @@ from zipfile import ZipFile
 from enum import Enum
 from functools import wraps
 import random
+import pickle
 
 import numpy as np
 from keras.datasets import mnist
@@ -104,6 +105,14 @@ class Market1501(Dataset):
     """Market1501 dataset"""
 
     filepath = get_filepath('market1501.npz')
+    test_index_filename = get_filepath('market1501-testindex.pkl')
+
+    @classmethod
+    def get(cls, *args, **kwargs):
+        data = dict(super().get(*args, **kwargs))
+        with open(cls.test_index_filename, 'rb') as indexfile:
+            data['test_index'] = pickle.load(indexfile)
+        return data
 
     @classmethod
     @save_dataset
@@ -154,7 +163,9 @@ class Market1501(Dataset):
             for keys in test_prepared:
                 test_index.append((int(keys[0]), tuple(test_prepared[keys])))
             test_index = tuple(test_index)
-            print(test_index)
+
+            with open(test_index_filename, 'wb') as indexfile:
+                pickle.dump(test_index, indexfile, pickle.HIGHEST_PROTOCOL)
 
             X_train = np.array(X_train)
             y_train = preprocess_cathegories(y_train)
@@ -171,7 +182,6 @@ class Market1501(Dataset):
                     'y_test': y_test,
                     'X_query': X_query,
                     'y_query': y_query,
-                    'test_index': test_index,
                    }
         else:
             raise ValueError(_("{filepath} not found, please, download it from {url}")
