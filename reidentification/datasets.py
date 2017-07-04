@@ -128,12 +128,33 @@ class Market1501(Dataset):
                                  r'(-?\d+)_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
             query_re = re.compile(r'^Market-1501-v15.09.15/query/' +
                                   r'(-?\d+)_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
+            gallery_re = re.compile('^Market-1501-v15.09.15/bounding_box_test/([-\d]+)_c(\d)s(\d).*$')
+
+            test_gallery = []
 
             with ZipFile(MARKET1501_ZIP) as zip_file:
                 for filepath in zip_file.namelist():
                     load_jpg(filepath, train_re, X_train, y_train)
                     load_jpg(filepath, test_re, X_test, y_test)
                     load_jpg(filepath, query_re, X_query, y_query)
+
+                    m = gallery_re.match(filepath)
+                    if m:
+                        test_gallery.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+
+            test_prepared = {}
+            for key, (person, camera, sequence) in enumerate(test_gallery):
+                if person in [-1, 0]:
+                    arr = test_prepared.setdefault((person, key), [])
+                else:
+                    arr = test_prepared.setdefault((person, camera, sequence), [])
+                arr.append(key)
+
+            test_index = []
+            for keys in test_prepared:
+                test_index.append((int(keys[0]), tuple(test_prepared[keys])))
+            test_index = tuple(test_index)
+            print(test_index)
 
             X_train = np.array(X_train)
             y_train = preprocess_cathegories(y_train)
@@ -150,6 +171,7 @@ class Market1501(Dataset):
                     'y_test': y_test,
                     'X_query': X_query,
                     'y_query': y_query,
+                    'test_index': test_index,
                    }
         else:
             raise ValueError(_("{filepath} not found, please, download it from {url}")
