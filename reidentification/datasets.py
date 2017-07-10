@@ -157,7 +157,7 @@ class Market1501(Dataset):
 
             prepared = {}
             for key, (person, camera, sequence) in enumerate(query_gallery):
-                arr = prepared.setdefault((person, camera, sequence), [])
+                arr = prepared.setdefault((person, camera), [])
                 arr.append(key)
 
             index = []
