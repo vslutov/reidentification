@@ -188,12 +188,10 @@ class LastClassifier(ReidModel):
         self.model.fit(X_feature, y_test)
 
     @classmethod
-    def prepare(cls, indexator, X_test, y_test, query=QueryType.single, test_index=None):
+    def prepare(cls, indexator, X_test, y_test):
         model = cls(indexator)
         model.fit(X_test=X_test,
                   y_test=y_test,
-                  query=query,
-                  test_index=test_index,
                  )
         model.save()
         return model
@@ -228,18 +226,8 @@ class Distance(LastClassifier):
         if not self.set_model(model):
             self.model = neighbors.NearestNeighbors(n_neighbors=self.MAP_NEIGHBORS, metric=self.METRIC, n_jobs=-1)
 
-    def fit(self, X_test, y_test, query=QueryType.single, test_index=None):
+    def fit(self, X_test, y_test):
         X_feature = self.index(X_test)
-
-        if query is QueryType.multiple:
-            new_X_feature, new_y_test = [], []
-
-            for key, lst in test_index:
-                if key not in [-1, 0]:
-                    new_X_feature.append(X_feature[np.array(lst)].mean(axis=0))
-                    new_y_test.append(y_test[lst[0]])
-
-            X_feature, y_test = np.array(new_X_feature), np.array(new_y_test)
 
         self.model.fit(X_feature)
         self.y_test = y_test
@@ -249,8 +237,19 @@ class Distance(LastClassifier):
         our_neighbors = self.model.kneighbors(X_feature, n_neighbors=1, return_distance=False).reshape((-1,))
         return self.y_test(our_neighbors)
 
-    def evaluate(self, X_query, y_query):
+    def evaluate(self, X_query, y_query, query=QueryType.single, index=None):
         X_feature = self.index(X_query)
+
+        if query is QueryType.multiple:
+            new_X_feature, new_y_query = [], []
+
+            for key, lst in index:
+                # if key not in [-1, 0]:
+                    new_X_feature.append(X_feature[np.array(lst)].mean(axis=0))
+                    new_y_query.append(y_query[lst[0]])
+
+            X_feature, y_query = np.array(new_X_feature), np.array(new_y_query)
+
         our_neighbors = self.model.kneighbors(X_feature, n_neighbors=self.N_NEIGHBORS, return_distance=False)
 
         y_pred = self.y_test[our_neighbors]

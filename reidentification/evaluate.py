@@ -40,8 +40,6 @@ def get_dataset_and_model(args):
     classifier = models[args.classifier].prepare(indexator=model.get_indexator(),
                                                  X_test=dataset['X_test'],
                                                  y_test=dataset['y_test'],
-                                                 query=args.query,
-                                                 test_index=dataset['test_index'],
                                                 )
     return dataset, model, classifier
 
@@ -50,7 +48,11 @@ def evaluate_normal(args):
     np.random.seed(123)
     dataset, model, classifier = get_dataset_and_model(args)
 
-    print(tabulate([classifier.evaluate(dataset['X_query'], dataset['y_query'])],
+    print(tabulate([classifier.evaluate(dataset['X_query'],
+                                        dataset['y_query'],
+                                        query=args.query,
+                                        index=dataset['index'],
+                                       )],
                    headers=classifier.metric_names))
 
 def evaluate_randomforest(args):

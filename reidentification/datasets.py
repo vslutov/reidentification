@@ -105,13 +105,13 @@ class Market1501(Dataset):
     """Market1501 dataset"""
 
     filepath = get_filepath('market1501.npz')
-    test_index_filename = get_filepath('market1501-testindex.pkl')
+    index_filename = get_filepath('market1501-index.pkl')
 
     @classmethod
     def get(cls, *args, **kwargs):
         data = dict(super().get(*args, **kwargs))
-        with open(cls.test_index_filename, 'rb') as indexfile:
-            data['test_index'] = pickle.load(indexfile)
+        with open(cls.index_filename, 'rb') as indexfile:
+            data['index'] = pickle.load(indexfile)
         return data
 
     @classmethod
@@ -120,9 +120,9 @@ class Market1501(Dataset):
         """Unzip market1501 and save to npz."""
         def load_jpg(filepath, regexp, X, y):
             """Load jpg from archieve and save image and label."""
-            match = regexp.search(filepath)
+            match = regexp.match(filepath)
             if match:
-                y.append(int(match.groups()[0]))
+                y.append(int(match.group(1)))
                 with zip_file.open(match.string) as image_file:
                     image = imread(image_file).astype(np.float32) / 255
                     # image = resize(image, (224, 224))
@@ -131,41 +131,42 @@ class Market1501(Dataset):
         if os.path.isfile(MARKET1501_ZIP):
 
             X_train, y_train, X_test, y_test, X_query, y_query = [], [], [], [], [], []
+            X_gallery, y_gallery, gt_bbox = [], [], []
+
             train_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_train/' +
                                   r'(-?\d+)_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
             test_re = re.compile(r'^Market-1501-v15.09.15/bounding_box_test/' +
                                  r'(-?\d+)_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
             query_re = re.compile(r'^Market-1501-v15.09.15/query/' +
                                   r'(-?\d+)_c\ds\d_\d{6}_\d{2}.jpg[.\w]*$')
-            gallery_re = re.compile('^Market-1501-v15.09.15/bounding_box_test/([-\d]+)_c(\d)s(\d).*$')
-
-            test_gallery = []
+            galley_re = re.compile(r'^Market-1501-v15.09.15/gt_bbox/(\d+)_c(\d)s(\d)_(\d+)_.*$')
 
             with ZipFile(MARKET1501_ZIP) as zip_file:
                 for filepath in zip_file.namelist():
                     load_jpg(filepath, train_re, X_train, y_train)
                     load_jpg(filepath, test_re, X_test, y_test)
                     load_jpg(filepath, query_re, X_query, y_query)
+                    load_jpg(filepath, galley_re, X_gallery, y_gallery)
 
-                    m = gallery_re.match(filepath)
+                    m = galley_re.match(filepath)
                     if m:
-                        test_gallery.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+                        gt_bbox.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
 
-            test_prepared = {}
-            for key, (person, camera, sequence) in enumerate(test_gallery):
-                if person in [-1, 0]:
-                    arr = test_prepared.setdefault((person, key), [])
-                else:
-                    arr = test_prepared.setdefault((person, camera, sequence), [])
+            query_gallery = tuple(keys for keys in gt_bbox if keys[0] in y_query)
+            X_query, y_query = zip(*((X, y) for X, y in zip(X_gallery, y_gallery) if y in y_query))
+
+            prepared = {}
+            for key, (person, camera, sequence) in enumerate(query_gallery):
+                arr = prepared.setdefault((person, camera, sequence), [])
                 arr.append(key)
 
-            test_index = []
-            for keys in test_prepared:
-                test_index.append((int(keys[0]), tuple(test_prepared[keys])))
-            test_index = tuple(test_index)
+            index = []
+            for keys in prepared:
+                index.append((keys[0], tuple(prepared[keys])))
+            index = tuple(index)
 
-            with open(test_index_filename, 'wb') as indexfile:
-                pickle.dump(test_index, indexfile, pickle.HIGHEST_PROTOCOL)
+            with open(cls.index_filename, 'wb') as indexfile:
+                pickle.dump(index, indexfile, pickle.HIGHEST_PROTOCOL)
 
             X_train = np.array(X_train)
             y_train = preprocess_cathegories(y_train)
